@@ -16,16 +16,6 @@ on:
       - "plugins/**"
       - "sdk/**"
   workflow_dispatch:
-    inputs:
-      scope:
-        description: "Documentation scope"
-        required: false
-        default: "changed"
-        type: choice
-        options:
-          - changed
-          - full
-          - api-only
 
 permissions:
   contents: write
@@ -34,7 +24,7 @@ permissions:
 jobs:
   ai-docs:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -45,58 +35,86 @@ jobs:
         id: changes
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
-            FILES=$(git diff --name-only HEAD~1 -- 'src/**' 'packages/**' 'plugins/**' 'sdk/**' | head -50)
+            FILES=$(git diff --name-only HEAD~1 -- 'src/**' 'packages/**' 'plugins/**' 'sdk/**' | head -30)
           elif [ "${{ github.event_name }}" = "pull_request" ]; then
-            FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- 'src/**' 'packages/**' 'plugins/**' 'sdk/**' | head -50)
+            FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- 'src/**' 'packages/**' 'plugins/**' 'sdk/**' | head -30)
           else
-            FILES="all"
+            FILES=$(find src packages plugins sdk -name '*.ts' -o -name '*.tsx' 2>/dev/null | head -30)
           fi
           echo "files<<EOF" >> $GITHUB_OUTPUT
           echo "$FILES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Generate Documentation
-        uses: anthropics/claude-code-action@v1
+      - name: Read changed file contents
+        id: contents
+        run: |
+          CONTENTS=""
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            [ -f "$file" ] || continue
+            CONTENTS+="--- $file ---"$'\n'
+            CONTENTS+="$(head -80 "$file")"$'\n\n'
+          done <<< "${{ steps.changes.outputs.files }}"
+          CONTENTS=$(echo "$CONTENTS" | head -c 25000)
+          echo "contents<<EOCONTENT" >> $GITHUB_OUTPUT
+          echo "$CONTENTS" >> $GITHUB_OUTPUT
+          echo "EOCONTENT" >> $GITHUB_OUTPUT
+
+      - name: Generate documentation
+        id: docs
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          RESPONSE=$(curl -s https://openrouter.ai/api/v1/chat/completions \
+            -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -H "HTTP-Referer: https://github.com/${{ github.repository }}" \
+            -H "X-Title: AI Docs Generator" \
+            -d "$(jq -n \
+              --arg files "${{ steps.changes.outputs.files }}" \
+              --arg contents "${{ steps.contents.outputs.contents }}" \
+              '{
+                "model": "meta-llama/llama-4-maverick:free",
+                "messages": [
+                  {
+                    "role": "system",
+                    "content": "You are a technical documentation expert. Generate JSDoc/TSDoc comments and a documentation summary for the given source files. Focus on exported functions, interfaces, and types. Document the why, not the what. Keep it concise."
+                  },
+                  {
+                    "role": "user",
+                    "content": ("Generate documentation for these files:\n\nFiles:\n" + $files + "\n\nSource:\n" + $contents + "\n\nProvide: 1) JSDoc comments for each exported symbol 2) A summary of what each module does 3) Any suggested README updates")
+                  }
+                ],
+                "max_tokens": 4000
+              }')")
+
+          DOCS=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // "Documentation generation failed."')
+          echo "docs<<EODOCS" >> $GITHUB_OUTPUT
+          echo "$DOCS" >> $GITHUB_OUTPUT
+          echo "EODOCS" >> $GITHUB_OUTPUT
+
+      - name: Post documentation suggestions
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          prompt: |
-            You are a technical documentation expert. Update documentation for changed source files.
+          script: |
+            const docs = `## 📚 AI Documentation Suggestions\n\n${{ steps.docs.outputs.docs }}\n\n---\n*Powered by OpenRouter (Llama 4 Maverick — free tier)*`;
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: docs
+            });
 
-            ## Changed Files
-            ${{ steps.changes.outputs.files }}
-
-            ## Documentation Workflow
-            1. **Analyze**: Read the changed files and understand the public API surface
-            2. **Check Existing Docs**: Find existing documentation that needs updating
-            3. **Update CLAUDE.md**: If architecture or conventions changed, update CLAUDE.md
-            4. **Update API Docs**: Update or create JSDoc/TSDoc comments for:
-               - Exported functions and classes
-               - Public interfaces and types
-               - Complex internal logic that needs explanation
-            5. **Update README**: If the changes affect user-facing features, update README.md
-            6. **Changelog**: Add entries to CHANGELOG.md for notable changes
-
-            ## Documentation Standards
-            - Keep CLAUDE.md under 40,000 characters
-            - Use JSDoc/TSDoc format for inline documentation
-            - Document the "why", not the "what" — code should explain itself
-            - Include usage examples for public APIs
-            - Don't document obvious things (getters, setters, trivial functions)
-            - Keep language concise and technical
-          allowed_tools: |
-            Read
-            Write
-            Edit
-            Glob
-            Grep
-            Bash(git diff, git log, git show)
-          timeout_minutes: 15
-
-      - name: Commit documentation updates
+      - name: Save docs output
         if: github.event_name == 'push'
         run: |
-          git config user.name "claude-ai[bot]"
-          git config user.email "claude-ai[bot]@users.noreply.github.com"
-          git add -A docs/ CLAUDE.md README.md CHANGELOG.md '*.md' || true
-          git diff --staged --quiet || git commit -m "docs: auto-update documentation for recent changes"
+          mkdir -p docs/generated
+          cat << 'EODOC' > docs/generated/latest-ai-docs.md
+          ${{ steps.docs.outputs.docs }}
+          EODOC
+          git config user.name "ai-docs[bot]"
+          git config user.email "ai-docs[bot]@users.noreply.github.com"
+          git add docs/ || true
+          git diff --staged --quiet || git commit -m "docs: auto-generated documentation update"
           git push || true
