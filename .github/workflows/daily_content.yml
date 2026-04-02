@@ -1,0 +1,31 @@
+name: Daily Content Generation
+
+on:
+  schedule:
+    - cron: '30 22 * * *'  # 4:00 AM IST (22:30 UTC previous day)
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  generate-content:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate daily content
+        run: python scripts/daily_run.py
+
+      - name: Commit and push new content
+        run: |
+          git config user.name "SmartPicks Bot"
+          git config user.email "bot@smartpicks.com"
+          git add data/articles/ docs/
+          git diff --staged --quiet || git commit -m "Auto: Daily content generation"
+          git push

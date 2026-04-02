@@ -1,0 +1,56 @@
+owner:
+  telegram_id: 0  # Replace with your Telegram user ID
+  telegram_bot_token: "BOT_TOKEN_HERE"  # Get from @BotFather
+
+blog:
+  name: "SmartPicks India"
+  tagline: "Honest reviews & best deals"
+  url: "https://username.github.io/Anthropic-claude-code"
+  posts_per_day: 1
+  language: "en"
+
+niches:
+  - name: "tech_gadgets"
+    keywords:
+      - "best earbuds under 1000"
+      - "phone under 15000"
+      - "smartwatch under 3000"
+      - "best laptop under 30000"
+  - name: "kitchen"
+    keywords:
+      - "best mixer grinder"
+      - "air fryer india"
+      - "water purifier under 10000"
+  - name: "fitness"
+    keywords:
+      - "resistance bands india"
+      - "yoga mat best"
+      - "protein powder budget"
+
+social:
+  twitter:
+    enabled: false
+    api_key: ""
+    api_secret: ""
+    access_token: ""
+    access_token_secret: ""
+    posts_per_day: 4
+    hashtag_groups:
+      tech: ["#TechDeals", "#GadgetReview", "#BestBuy", "#India"]
+      kitchen: ["#KitchenAppliances", "#HomeDeals", "#IndianKitchen"]
+      fitness: ["#FitnessIndia", "#WorkoutGear", "#FitLife"]
+  medium:
+    enabled: false
+    token: ""
+  blogger:
+    enabled: false
+    blog_id: ""
+    credentials_json: ""
+
+content:
+  article_length: "medium"  # short/medium/long
+  include_comparison_table: true
+  include_pros_cons: true
+  cta_style: "soft"  # soft/direct
+
+posting_hours: [9, 12, 17, 20]  # IST hours for social posting

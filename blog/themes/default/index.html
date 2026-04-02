@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}{{ blog.name | default('SmartPicks India') }} - {{ blog.tagline | default('Honest reviews & best deals') }}{% endblock %}
+{% block description %}{{ blog.tagline | default('Honest reviews and best deals in India') }}{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <h1>{{ blog.name | default('SmartPicks India') }}</h1>
+    <p>{{ blog.tagline | default('Honest reviews & best deals') }}</p>
+</section>
+
+<section class="articles">
+    <h2>Latest Reviews</h2>
+
+    {% if articles %}
+    <div class="article-grid">
+        {% for article in articles %}
+        <article class="article-card">
+            <div class="article-meta">
+                <span class="category">{{ article.category }}</span>
+                <time>{{ article.date }}</time>
+            </div>
+            <h3><a href="/{{ article.slug }}/">{{ article.title }}</a></h3>
+            <p>{{ article.description[:150] }}{% if article.description|length > 150 %}...{% endif %}</p>
+            <a href="/{{ article.slug }}/" class="read-more">Read More</a>
+        </article>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="no-articles">New reviews coming soon! Stay tuned.</p>
+    {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,29 @@
+programs:
+  - name: "Amazon Associates"
+    id: "amazon"
+    base_url: "https://www.amazon.in"
+    tag: "your-tag-20"  # Replace with your Amazon Associates tag
+    commission_rates:
+      electronics: 3
+      kitchen: 5
+      fitness: 7
+      books: 8
+    active: true
+
+  - name: "Flipkart Affiliate"
+    id: "flipkart"
+    base_url: "https://www.flipkart.com"
+    affiliate_id: ""  # Replace with your Flipkart affiliate ID
+    commission_rates:
+      electronics: 4
+      kitchen: 6
+      fitness: 5
+    active: false
+
+  - name: "CJ Affiliate"
+    id: "cj"
+    base_url: ""
+    publisher_id: ""
+    active: false
+
+default_program: "amazon"

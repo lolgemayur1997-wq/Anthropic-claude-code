@@ -1,0 +1,26 @@
+name: Weekly Analytics Report
+
+on:
+  schedule:
+    - cron: '30 4 * * 0'  # Sunday 10:00 AM IST (4:30 UTC)
+  workflow_dispatch:
+
+jobs:
+  analytics-report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate and send report
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_OWNER_ID: ${{ secrets.TELEGRAM_OWNER_ID }}
+        run: python scripts/analytics_run.py

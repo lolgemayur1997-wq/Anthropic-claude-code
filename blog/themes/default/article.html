@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}{{ article.title }} - SmartPicks India{% endblock %}
+{% block description %}{{ article.description }}{% endblock %}
+{% block og_title %}{{ article.title }}{% endblock %}
+{% block og_description %}{{ article.description }}{% endblock %}
+{% block og_type %}article{% endblock %}
+
+{% block extra_head %}
+<script type="application/ld+json">
+{
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "headline": "{{ article.title }}",
+    "description": "{{ article.description }}",
+    "datePublished": "{{ article.date }}"
+}
+</script>
+{% endblock %}
+
+{% block content %}
+<article class="article-full">
+    <header class="article-header">
+        <div class="article-meta">
+            <span class="category">{{ article.category }}</span>
+            <time>{{ article.date }}</time>
+        </div>
+        <h1>{{ article.title }}</h1>
+        <p class="article-description">{{ article.description }}</p>
+    </header>
+
+    <div class="article-content">
+        {{ article.content_html | safe }}
+    </div>
+
+    <footer class="article-footer">
+        <p class="disclaimer">Disclosure: Some links in this article are affiliate links. We may earn a small commission at no extra cost to you.</p>
+        <a href="/" class="back-link">&larr; Back to all reviews</a>
+    </footer>
+</article>
+{% endblock %}

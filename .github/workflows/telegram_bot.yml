@@ -1,0 +1,53 @@
+name: Telegram Bot Handler
+
+on:
+  workflow_dispatch:
+    inputs:
+      command:
+        description: 'Bot command to execute'
+        required: true
+        type: string
+      data:
+        description: 'Command data (JSON)'
+        required: false
+        type: string
+
+jobs:
+  handle-command:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Execute command
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_OWNER_ID: ${{ secrets.TELEGRAM_OWNER_ID }}
+          BOT_COMMAND: ${{ inputs.command }}
+          BOT_DATA: ${{ inputs.data }}
+        run: |
+          echo "Executing command: $BOT_COMMAND"
+          if [ "$BOT_COMMAND" = "generate" ]; then
+            python scripts/daily_run.py
+          elif [ "$BOT_COMMAND" = "publish" ]; then
+            python -c "from blog.builder import build_site; import yaml; config=yaml.safe_load(open('config/settings.yaml')); build_site(blog_config=config.get('blog'))"
+          elif [ "$BOT_COMMAND" = "social" ]; then
+            python scripts/social_run.py
+          elif [ "$BOT_COMMAND" = "analytics" ]; then
+            python scripts/analytics_run.py
+          fi
+
+      - name: Commit changes
+        run: |
+          git config user.name "SmartPicks Bot"
+          git config user.email "bot@smartpicks.com"
+          git add -A
+          git diff --staged --quiet || git commit -m "Auto: Bot command - ${{ inputs.command }}"
+          git push

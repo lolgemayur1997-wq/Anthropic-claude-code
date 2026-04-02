@@ -1,0 +1,31 @@
+platforms:
+  twitter:
+    username: ""
+    enabled: false
+
+  medium:
+    username: ""
+    enabled: false
+
+  blogger:
+    blog_url: ""
+    enabled: false
+
+  instagram:
+    username: ""
+    enabled: false
+    # Note: Instagram posting requires third-party tools
+
+posting_schedule:
+  # Times in IST (24h format)
+  morning: "09:00"
+  afternoon: "12:00"
+  evening: "17:00"
+  night: "20:00"
+
+content_distribution:
+  # What percentage of content goes to each platform
+  blog: 100        # All articles go to blog
+  twitter: 80      # 80% of articles get tweeted
+  medium: 50       # 50% cross-posted to Medium
+  blogger: 30      # 30% cross-posted to Blogger

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}SmartPicks India{% endblock %}</title>
+    <meta name="description" content="{% block description %}Honest reviews and best deals in India{% endblock %}">
+    <meta name="robots" content="index, follow">
+    <meta property="og:title" content="{% block og_title %}SmartPicks India{% endblock %}">
+    <meta property="og:description" content="{% block og_description %}{% endblock %}">
+    <meta property="og:type" content="{% block og_type %}website{% endblock %}">
+    <link rel="stylesheet" href="/style.css">
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <header>
+        <nav>
+            <a href="/" class="logo">SmartPicks India</a>
+            <span class="tagline">Honest reviews &amp; best deals</span>
+        </nav>
+    </header>
+
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer>
+        <p>&copy; {{ year | default('2026') }} SmartPicks India. All rights reserved.</p>
+        <p class="disclaimer">Some links on this page are affiliate links. We may earn a commission if you make a purchase.</p>
+    </footer>
+</body>
+</html>
