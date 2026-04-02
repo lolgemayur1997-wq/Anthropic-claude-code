@@ -1,6 +1,6 @@
 # AI Workflow Pipeline
 
-A complete **free** AI-powered development pipeline using OpenRouter + Llama 4 Maverick. Combines GitHub Actions, Claude Code slash commands, and a local TypeScript orchestrator.
+A complete AI-powered development pipeline using **Claude** via `anthropics/claude-code-action` and the Claude Agent SDK. Combines GitHub Actions, Claude Code slash commands, and a local TypeScript orchestrator.
 
 ## Architecture
 
@@ -13,40 +13,36 @@ A complete **free** AI-powered development pipeline using OpenRouter + Llama 4 M
 ├──────────────┴──────────────┴───────────┴───────────┤
 │              Trigger Layer                           │
 │  ┌────────────┐  ┌──────────┐  ┌──────────────────┐ │
-│  │  GitHub     │  │  Claude  │  │  Local            │ │
+│  │  GitHub     │  │  Claude  │  │  Agent SDK       │ │
 │  │  Actions    │  │  /cmds   │  │  Orchestrator    │ │
 │  └────────────┘  └──────────┘  └──────────────────┘ │
 ├─────────────────────────────────────────────────────┤
-│  OpenRouter API (free tier) — Llama 4 Maverick      │
+│           Anthropic API (Claude Sonnet/Opus)         │
 └─────────────────────────────────────────────────────┘
 ```
 
-## Setup (Free — No Credit Card)
+## Setup
 
-### Step 1: Get your free OpenRouter API key
+### Step 1: Get your Anthropic API key
 
-1. Go to **[openrouter.ai](https://openrouter.ai)**
-2. Sign up (free, no credit card)
-3. Go to **Keys** → **Create Key**
-4. Copy the key (starts with `sk-or-...`)
+1. Go to **[console.anthropic.com](https://console.anthropic.com)**
+2. Navigate to **Settings** → **API Keys**
+3. Click **Create Key** and copy it
 
 ### Step 2: Add the key to GitHub
 
 1. Go to your repo → **Settings** → **Secrets and variables** → **Actions**
 2. Click **New repository secret**
-3. Name: `OPENROUTER_API_KEY`
-4. Value: paste your key
-5. Click **Add secret**
+3. Name: `ANTHROPIC_API_KEY`
+4. Paste your key → **Add secret**
 
-### Step 3: For local use, export the key
+### Step 3: For local orchestrator use
 
 ```bash
-export OPENROUTER_API_KEY="sk-or-..."
+export ANTHROPIC_API_KEY="sk-ant-..."
 ```
 
-Or add it to your `.env` file (already gitignored).
-
-That's it — all workflows are now active.
+All workflows are now active.
 
 ---
 
@@ -57,9 +53,11 @@ That's it — all workflows are now active.
 | Trigger | Workflow | What it does |
 |---------|----------|-------------|
 | PR opened/updated | `ai-code-review.yml` | Reviews code for quality, security, performance |
-| Issue labeled `ai-implement` | `ai-issue-implementation.yml` | Generates implementation plan for the issue |
-| PR opened/updated | `ai-testing-qa.yml` | Suggests tests and runs existing test suite |
-| Push to main | `ai-documentation.yml` | Generates documentation for changed files |
+| Issue labeled `ai-implement` | `ai-issue-implementation.yml` | Implements the issue and opens a PR |
+| PR opened/updated | `ai-testing-qa.yml` | Generates tests and runs QA checks |
+| Push to main | `ai-documentation.yml` | Updates docs for changed files |
+
+Claude can **read, write, and edit files** directly in the workflow — not just comment suggestions.
 
 ### 2. Claude Code Slash Commands (Local)
 
@@ -74,14 +72,14 @@ Use these commands directly in Claude Code:
 /pipeline            # Run the full pipeline (review → test → docs → verify)
 ```
 
-### 3. Local Orchestrator (Programmatic)
+### 3. Agent SDK Orchestrator (Programmatic)
 
 ```bash
 cd agents
 bun install
 
 # Set your key
-export OPENROUTER_API_KEY="sk-or-..."
+export ANTHROPIC_API_KEY="sk-ant-..."
 
 # Full pipeline
 bun run pipeline
@@ -110,11 +108,12 @@ bun run orchestrator.ts --scope all --no-stop
 ### Stage 2: Test Generation & QA
 - Identifies untested code paths in changed files
 - Generates comprehensive tests (happy path, edge cases, errors)
-- Runs `bun test` to verify all tests pass (verify stage)
+- Runs `bun test` to verify all tests pass
+- Runs `bun run typecheck` for type safety
 
 ### Stage 3: Documentation
-- Generates JSDoc/TSDoc for exported APIs
-- Suggests README and CLAUDE.md updates
+- Updates JSDoc/TSDoc for changed public APIs
+- Updates CLAUDE.md if architecture changed
 - Keeps docs concise and technical
 
 ### Stage 4: Verification
@@ -129,28 +128,9 @@ bun run orchestrator.ts --scope all --no-stop
 
 ### GitHub Actions Secret Required
 
-| Secret | Description | How to Get |
-|--------|-------------|------------|
-| `OPENROUTER_API_KEY` | OpenRouter API key | Free at [openrouter.ai/keys](https://openrouter.ai/keys) |
-
-### Environment Variables (Local Orchestrator)
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `OPENROUTER_API_KEY` | Your OpenRouter API key | *required* |
-| `AI_MODEL` | Model to use | `meta-llama/llama-4-maverick:free` |
-
-### Free Models Available on OpenRouter
-
-| Model | ID |
-|-------|----|
-| **Llama 4 Maverick** (default) | `meta-llama/llama-4-maverick:free` |
-| Llama 4 Scout | `meta-llama/llama-4-scout:free` |
-| Gemma 3 27B | `google/gemma-3-27b-it:free` |
-| Mistral Small | `mistralai/mistral-small-3.1-24b-instruct:free` |
-| Qwen 2.5 72B | `qwen/qwen-2.5-72b-instruct:free` |
-
-To switch models, set `AI_MODEL` in your environment or update the workflow files.
+| Secret | Description |
+|--------|-------------|
+| `ANTHROPIC_API_KEY` | Anthropic API key from [console.anthropic.com](https://console.anthropic.com) |
 
 ---
 
@@ -169,9 +149,3 @@ Edit the prompt in:
 - `.github/workflows/ai-code-review.yml` (CI)
 - `.claude/commands/review.md` (local)
 - `agents/orchestrator.ts` → `STAGE_PROMPTS.review` (SDK)
-
----
-
-## Cost
-
-**$0.** All workflows use OpenRouter's free tier models. No credit card required. Free tier has rate limits (~20 requests/minute) which is sufficient for CI/CD usage.

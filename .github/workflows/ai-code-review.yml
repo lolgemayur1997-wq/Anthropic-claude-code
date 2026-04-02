@@ -7,65 +7,47 @@ on:
 permissions:
   contents: read
   pull-requests: write
+  issues: write
 
 jobs:
   ai-code-review:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Get PR diff
-        id: diff
-        run: |
-          DIFF=$(git diff origin/${{ github.base_ref }}...HEAD | head -c 30000)
-          echo "diff<<EODIFF" >> $GITHUB_OUTPUT
-          echo "$DIFF" >> $GITHUB_OUTPUT
-          echo "EODIFF" >> $GITHUB_OUTPUT
-
-      - name: AI Code Review
-        id: review
-        env:
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-        run: |
-          RESPONSE=$(curl -s https://openrouter.ai/api/v1/chat/completions \
-            -H "Authorization: Bearer $OPENROUTER_API_KEY" \
-            -H "Content-Type: application/json" \
-            -H "HTTP-Referer: https://github.com/${{ github.repository }}" \
-            -H "X-Title: AI Code Review" \
-            -d "$(jq -n \
-              --arg diff "${{ steps.diff.outputs.diff }}" \
-              '{
-                "model": "meta-llama/llama-4-maverick:free",
-                "messages": [
-                  {
-                    "role": "system",
-                    "content": "You are an expert code reviewer. Review the diff and provide findings grouped by severity (critical/warning/suggestion/praise). For each finding include: file, issue, and fix. End with a verdict: APPROVE, REQUEST_CHANGES, or COMMENT."
-                  },
-                  {
-                    "role": "user",
-                    "content": ("Review this PR diff:\n\n```diff\n" + $diff + "\n```\n\nCheck for: code quality, security vulnerabilities, performance issues, type safety, test coverage, and conventions.")
-                  }
-                ],
-                "max_tokens": 4000
-              }')")
-
-          REVIEW=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // "Review failed — no response from model."')
-          echo "review<<EOREVIEW" >> $GITHUB_OUTPUT
-          echo "$REVIEW" >> $GITHUB_OUTPUT
-          echo "EOREVIEW" >> $GITHUB_OUTPUT
-
-      - name: Post review comment
-        uses: actions/github-script@v7
+      - name: Run AI Code Review
+        uses: anthropics/claude-code-action@v1
         with:
-          script: |
-            const review = `## 🤖 AI Code Review\n\n${{ steps.review.outputs.review }}\n\n---\n*Powered by OpenRouter (Llama 4 Maverick — free tier)*`;
-            github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: review
-            });
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            You are an expert code reviewer. Review this pull request thoroughly.
+
+            ## Review Checklist
+            1. **Code Quality**: Check for clean code, proper naming, and SOLID principles
+            2. **Security**: Identify potential vulnerabilities (injection, XSS, auth issues, secrets exposure)
+            3. **Performance**: Flag N+1 queries, unnecessary re-renders, memory leaks, blocking operations
+            4. **Type Safety**: Ensure proper TypeScript types, no `any` usage, correct narrowing
+            5. **Testing**: Verify adequate test coverage for new/changed code
+            6. **Documentation**: Check that public APIs and complex logic are documented
+            7. **Error Handling**: Validate proper error handling at system boundaries
+            8. **Conventions**: Ensure code follows project conventions from CLAUDE.md
+
+            ## Output Format
+            For each finding, provide:
+            - **Severity**: critical / warning / suggestion / praise
+            - **File & Line**: Exact location
+            - **Issue**: Clear description
+            - **Fix**: Concrete suggestion with code snippet if applicable
+
+            Start with a brief summary, then list findings grouped by severity.
+            End with an overall assessment: APPROVE, REQUEST_CHANGES, or COMMENT.
+          allowed_tools: |
+            Read
+            Glob
+            Grep
+            Bash(git diff, git log, git show)
+          timeout_minutes: 10
