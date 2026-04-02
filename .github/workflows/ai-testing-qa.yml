@@ -1,0 +1,118 @@
+name: AI Testing & QA
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      test_scope:
+        description: "Scope of testing (all, changed, specific path)"
+        required: false
+        default: "changed"
+      target_path:
+        description: "Specific path to test (when scope is 'specific path')"
+        required: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: write
+
+jobs:
+  ai-test-generation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile || true
+
+      - name: Get changed files
+        id: changed
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- '*.ts' '*.tsx' | head -50)
+          else
+            FILES="${{ github.event.inputs.target_path }}"
+          fi
+          echo "files<<EOF" >> $GITHUB_OUTPUT
+          echo "$FILES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: AI Test Generation & QA
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            You are an expert QA engineer. Analyze the changed files and ensure comprehensive test coverage.
+
+            ## Changed Files
+            ${{ steps.changed.outputs.files }}
+
+            ## QA Workflow
+            1. **Analyze Changes**: Read each changed file and understand what was modified
+            2. **Check Existing Tests**: Find existing test files for the changed modules
+            3. **Gap Analysis**: Identify untested code paths, edge cases, and error scenarios
+            4. **Generate Tests**: Write comprehensive tests covering:
+               - Happy path scenarios
+               - Edge cases and boundary conditions
+               - Error handling paths
+               - Integration between modified components
+            5. **Run Tests**: Execute `bun test` and verify all tests pass
+            6. **Type Check**: Run `bun run typecheck` to ensure type safety
+
+            ## Test Standards
+            - Use Bun's built-in test runner (`bun:test`)
+            - Name test files as `*.test.ts` or `*.test.tsx`
+            - Use descriptive test names: `describe("ModuleName", () => { it("should handle edge case X", ...) })`
+            - Mock external dependencies, not internal modules
+            - Aim for meaningful coverage, not 100% line coverage
+            - Test behavior, not implementation details
+          allowed_tools: |
+            Read
+            Write
+            Edit
+            Glob
+            Grep
+            Bash(bun test, bun run typecheck, git diff, git log)
+          timeout_minutes: 15
+
+  ai-test-execution:
+    runs-on: ubuntu-latest
+    needs: ai-test-generation
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile || true
+
+      - name: Run full test suite
+        run: bun test 2>&1 | tee test-results.txt
+
+      - name: Run type check
+        run: bun run typecheck 2>&1 | tee typecheck-results.txt
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            test-results.txt
+            typecheck-results.txt

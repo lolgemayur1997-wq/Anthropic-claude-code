@@ -1,0 +1,20 @@
+{
+  "name": "ai-workflow-agents",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "AI workflow pipeline agents using Claude Agent SDK",
+  "scripts": {
+    "pipeline": "bun run orchestrator.ts",
+    "review": "bun run orchestrator.ts --stage review",
+    "test-gen": "bun run orchestrator.ts --stage test",
+    "docs": "bun run orchestrator.ts --stage docs",
+    "verify": "bun run orchestrator.ts --stage verify"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "latest"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "@types/bun": "latest"
+  }
+}

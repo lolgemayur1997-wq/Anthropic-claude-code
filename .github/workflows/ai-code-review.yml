@@ -1,0 +1,53 @@
+name: AI Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  ai-code-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run AI Code Review
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            You are an expert code reviewer. Review this pull request thoroughly.
+
+            ## Review Checklist
+            1. **Code Quality**: Check for clean code, proper naming, and SOLID principles
+            2. **Security**: Identify potential vulnerabilities (injection, XSS, auth issues, secrets exposure)
+            3. **Performance**: Flag N+1 queries, unnecessary re-renders, memory leaks, blocking operations
+            4. **Type Safety**: Ensure proper TypeScript types, no `any` usage, correct narrowing
+            5. **Testing**: Verify adequate test coverage for new/changed code
+            6. **Documentation**: Check that public APIs and complex logic are documented
+            7. **Error Handling**: Validate proper error handling at system boundaries
+            8. **Conventions**: Ensure code follows project conventions from CLAUDE.md
+
+            ## Output Format
+            For each finding, provide:
+            - **Severity**: critical / warning / suggestion / praise
+            - **File & Line**: Exact location
+            - **Issue**: Clear description
+            - **Fix**: Concrete suggestion with code snippet if applicable
+
+            Start with a brief summary, then list findings grouped by severity.
+            End with an overall assessment: APPROVE, REQUEST_CHANGES, or COMMENT.
+          allowed_tools: |
+            Read
+            Glob
+            Grep
+            Bash(git diff, git log, git show)
+          timeout_minutes: 10
