@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+bun.lockb
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Build output
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Claude local settings (personal, not shared)
+.claude/settings.local.json
+.claude/CLAUDE.local.md
+
+# Test artifacts
+test-results.txt
+typecheck-results.txt
+coverage/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
