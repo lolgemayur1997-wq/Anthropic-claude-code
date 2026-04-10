@@ -123,6 +123,34 @@ The Pinterest module generates eye-catching pin images and auto-posts them:
 3. Get your access token
 4. Add `PINTEREST_ACCESS_TOKEN` to GitHub Secrets
 
+## Deploy Bot (FREE — Required for Bot to Work)
+
+The bot needs to run on a server to respond to your Telegram messages. Use **Render.com** (free, no credit card needed):
+
+### One-Click Deploy on Render.com
+1. Go to **render.com** → Sign up with GitHub
+2. Click **"New"** → **"Web Service"**
+3. Connect your repo: `lolgemayur1997-wq/Anthropic-claude-code`
+4. Branch: `claude/passive-income-automation-YBso9`
+5. It auto-detects the Dockerfile
+6. Add environment variables:
+   - `TELEGRAM_BOT_TOKEN` = your bot token
+   - `TELEGRAM_OWNER_ID` = your user ID
+   - `PINTEREST_ACCESS_TOKEN` = your Pinterest token
+7. Click **Deploy** — bot goes live in 2 minutes!
+
+### Register Commands (Run Once)
+After deploying, register commands so they show in Telegram's menu:
+```bash
+TELEGRAM_BOT_TOKEN="your_token" python scripts/register_commands.py
+```
+
+### Alternative: Railway.app
+1. Go to **railway.app** → Sign up with GitHub
+2. New Project → Deploy from repo
+3. Add the same environment variables
+4. Auto-deploys from the Procfile
+
 ## License
 
 MIT

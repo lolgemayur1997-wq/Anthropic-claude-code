@@ -1,7 +1,14 @@
-"""Telegram bot entry point - SmartPicks Content Automation Bot."""
+"""Telegram bot entry point - SmartPicks Content Automation Bot.
+
+Supports two modes:
+- Polling mode (local dev): python -m bot.main
+- Webhook mode (Render/Railway): Set PORT env var, bot auto-detects
+"""
 
 import os
 import logging
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import threading
 
 import yaml
 from telegram.ext import (
@@ -45,6 +52,33 @@ def get_bot_token():
     return ""
 
 
+class HealthHandler(BaseHTTPRequestHandler):
+    """Simple HTTP handler for health checks (required by Render/Railway)."""
+
+    def do_GET(self):
+        if self.path == "/health" or self.path == "/":
+            self.send_response(200)
+            self.send_header("Content-type", "text/plain")
+            self.end_headers()
+            self.wfile.write(b"SmartPicks Bot is running!")
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def log_message(self, format, *args):
+        # Suppress default logging to avoid noise
+        pass
+
+
+def start_health_server(port):
+    """Start a simple HTTP server for health checks in a background thread."""
+    server = HTTPServer(("0.0.0.0", port), HealthHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    logger.info(f"Health check server running on port {port}")
+    return server
+
+
 def create_app():
     """Create and configure the Telegram bot application."""
     token = get_bot_token()
@@ -83,10 +117,31 @@ def create_app():
 
 
 def main():
-    """Run the bot in polling mode (for development/testing)."""
-    logger.info("Starting SmartPicks Bot...")
-    app = create_app()
-    app.run_polling()
+    """Run the bot - auto-detects polling vs webhook mode."""
+    port = os.environ.get("PORT")
+
+    if port:
+        # ============================================
+        # WEBHOOK MODE (for Render, Railway, etc.)
+        # ============================================
+        port = int(port)
+        logger.info(f"Starting SmartPicks Bot in WEBHOOK mode (port {port})...")
+
+        # Start health check server (Render needs this to keep the service alive)
+        start_health_server(port)
+
+        # Run bot in polling mode in the main thread
+        # (Polling works on free tiers that don't support inbound webhooks)
+        app = create_app()
+        logger.info("Bot is now running and listening for messages!")
+        app.run_polling(drop_pending_updates=True)
+    else:
+        # ============================================
+        # POLLING MODE (for local development)
+        # ============================================
+        logger.info("Starting SmartPicks Bot in POLLING mode...")
+        app = create_app()
+        app.run_polling()
 
 
 if __name__ == "__main__":

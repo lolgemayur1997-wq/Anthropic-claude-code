@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: smartpicks-bot
+    runtime: docker
+    plan: free
+    branch: claude/passive-income-automation-YBso9
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_OWNER_ID
+        sync: false
+      - key: PINTEREST_ACCESS_TOKEN
+        sync: false
+    healthCheckPath: /health
