@@ -1,27 +1,37 @@
 # Anthropic Claude Code — AI Workflow Pipeline
 
-An AI-powered development pipeline that automates code review, issue implementation, testing, and documentation using Claude.
+A **100% free** AI-powered development pipeline that automates code review, issue implementation, testing, and documentation using Google Gemini.
 
 ## What This Does
 
 | Workflow | Trigger | Description |
 |----------|---------|-------------|
 | **AI Code Review** | PR opened | Automatically reviews PRs for quality, security, and performance |
-| **AI Issue Implementation** | Issue labeled `ai-implement` | Reads the issue, writes code, and opens a PR |
-| **AI Testing & QA** | PR opened | Generates test suggestions and runs the test suite |
-| **AI Documentation** | Push to main | Auto-generates and commits documentation updates |
+| **AI Issue Implementation** | Issue labeled `ai-implement` | Reads the issue and generates an implementation plan |
+| **AI Testing & QA** | PR opened | Generates test suggestions for changed files |
+| **AI Documentation** | Push to main | Auto-generates documentation for changed code |
 
-## Quick Start
+## Setup (Free — No Credit Card)
 
-### 1. Add your API key
+### Step 1: Get your free Gemini API key
 
-Go to repo **Settings** → **Secrets and variables** → **Actions** → add `ANTHROPIC_API_KEY`.
+1. Go to **[aistudio.google.com/apikey](https://aistudio.google.com/apikey)**
+2. Sign in with your Google account
+3. Click **Create API Key**
+4. Copy the key
 
-### 2. That's it
+### Step 2: Add it to GitHub
 
-Open a PR or label an issue with `ai-implement` — Claude handles the rest.
+1. Go to your repo → **Settings** → **Secrets and variables** → **Actions**
+2. Click **New repository secret**
+3. Name: `GEMINI_API_KEY`
+4. Paste your key → **Add secret**
 
-### 3. Local commands (optional)
+### Step 3: Done
+
+Open a PR or label an issue with `ai-implement` — Gemini handles the rest.
+
+## Local Commands (Optional)
 
 With [Claude Code](https://claude.ai/code) installed:
 
@@ -33,12 +43,12 @@ With [Claude Code](https://claude.ai/code) installed:
 /pipeline            # Run full pipeline: review → test → docs → verify
 ```
 
-### 4. Programmatic pipeline (optional)
+## Programmatic Pipeline (Optional)
 
 ```bash
 cd agents
 bun install
-export ANTHROPIC_API_KEY="sk-ant-..."
+export GEMINI_API_KEY="your-key-here"
 bun run pipeline
 ```
 
@@ -46,19 +56,25 @@ bun run pipeline
 
 ```
 ├── CLAUDE.md                              # AI assistant instructions
-├── .claude/commands/                      # 5 slash commands
-│   ├── review.md                          #   /review
-│   ├── implement.md                       #   /implement
-│   ├── test.md                            #   /test
-│   ├── docs.md                            #   /docs
-│   └── pipeline.md                        #   /pipeline
-├── .claude/settings.json                  # Project permissions
+├── README.md                              # This file
+├── CHANGELOG.md                           # Version history
+├── LICENSE                                # MIT license
+├── SECURITY.md                            # Security policy
+├── .gitignore                             # Git ignore rules
+├── .claude/
+│   ├── settings.json                      # Project permissions
+│   └── commands/                          # 5 slash commands
+│       ├── review.md                      #   /review
+│       ├── implement.md                   #   /implement
+│       ├── test.md                        #   /test
+│       ├── docs.md                        #   /docs
+│       └── pipeline.md                    #   /pipeline
 ├── .github/workflows/                     # 4 CI/CD workflows
 │   ├── ai-code-review.yml                #   PR review
 │   ├── ai-issue-implementation.yml       #   Issue → code
 │   ├── ai-testing-qa.yml                 #   Test generation
 │   └── ai-documentation.yml             #   Doc generation
-└── agents/                                # SDK orchestrator
+└── agents/                                # Local pipeline runner
     ├── orchestrator.ts                    #   Pipeline runner
     ├── package.json                       #   Dependencies
     ├── tsconfig.json                      #   TypeScript config
@@ -69,19 +85,23 @@ bun run pipeline
 
 ### CI/CD (GitHub Actions)
 
-All workflows use [`anthropics/claude-code-action@v1`](https://github.com/anthropics/claude-code-action) which runs the full Claude Code runtime inside GitHub Actions. Claude can **read, write, and edit files** directly — not just post comments.
+All workflows call the **Google Gemini 2.0 Flash** API directly via `curl`. Gemini analyzes your diffs, source code, and issues, then posts results as PR/issue comments.
 
 ### Local (Slash Commands)
 
 Slash commands in `.claude/commands/` define reusable AI workflows you invoke with `/command-name` in Claude Code.
 
-### Programmatic (Agent SDK)
+### Programmatic (Orchestrator)
 
-The orchestrator in `agents/` uses the Claude Agent SDK to run a 4-stage pipeline programmatically. See [`agents/README.md`](agents/README.md) for details.
+The orchestrator in `agents/` runs a 4-stage pipeline (review → test → docs → verify) locally using the Gemini API. See [`agents/README.md`](agents/README.md) for details.
+
+## Cost
+
+**$0.** Everything uses Google Gemini 2.0 Flash free tier. No credit card required. 15 requests/minute, 1,500 requests/day — plenty for CI/CD.
 
 ## Tech Stack
 
-- **AI**: Claude (Anthropic API) via `claude-code-action` and Agent SDK
+- **AI**: Google Gemini 2.0 Flash (free tier)
 - **CI/CD**: GitHub Actions
 - **Runtime**: Bun
 - **Language**: TypeScript (strict mode)

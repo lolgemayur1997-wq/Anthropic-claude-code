@@ -8,6 +8,7 @@ on:
       - "packages/**"
       - "plugins/**"
       - "sdk/**"
+      - "agents/**"
   pull_request:
     types: [opened, synchronize]
     paths:
@@ -15,17 +16,8 @@ on:
       - "packages/**"
       - "plugins/**"
       - "sdk/**"
+      - "agents/**"
   workflow_dispatch:
-    inputs:
-      scope:
-        description: "Documentation scope"
-        required: false
-        default: "changed"
-        type: choice
-        options:
-          - changed
-          - full
-          - api-only
 
 permissions:
   contents: write
@@ -34,7 +26,7 @@ permissions:
 jobs:
   ai-docs:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -45,58 +37,69 @@ jobs:
         id: changes
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
-            FILES=$(git diff --name-only HEAD~1 -- 'src/**' 'packages/**' 'plugins/**' 'sdk/**' | head -50)
+            FILES=$(git diff --name-only HEAD~1 -- 'src/**' 'packages/**' 'plugins/**' 'sdk/**' 'agents/**' | head -30)
           elif [ "${{ github.event_name }}" = "pull_request" ]; then
-            FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- 'src/**' 'packages/**' 'plugins/**' 'sdk/**' | head -50)
+            FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- 'src/**' 'packages/**' 'plugins/**' 'sdk/**' 'agents/**' | head -30)
           else
-            FILES="all"
+            FILES=$(find . -name '*.ts' -o -name '*.tsx' | grep -v node_modules | head -30)
           fi
-          echo "files<<EOF" >> $GITHUB_OUTPUT
+
+          CONTENTS=""
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            [ -f "$file" ] || continue
+            CONTENTS+="--- $file ---"$'\n'
+            CONTENTS+="$(head -80 "$file")"$'\n\n'
+          done <<< "$FILES"
+          CONTENTS=$(echo "$CONTENTS" | head -c 25000)
+
+          echo "files<<EOFILES" >> $GITHUB_OUTPUT
           echo "$FILES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          echo "EOFILES" >> $GITHUB_OUTPUT
 
-      - name: Generate Documentation
-        uses: anthropics/claude-code-action@v1
-        with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          prompt: |
-            You are a technical documentation expert. Update documentation for changed source files.
+          EOF_MARKER=$(dd if=/dev/urandom bs=15 count=1 2>/dev/null | base64)
+          echo "contents<<$EOF_MARKER" >> $GITHUB_OUTPUT
+          echo "$CONTENTS" >> $GITHUB_OUTPUT
+          echo "$EOF_MARKER" >> $GITHUB_OUTPUT
 
-            ## Changed Files
-            ${{ steps.changes.outputs.files }}
-
-            ## Documentation Workflow
-            1. **Analyze**: Read the changed files and understand the public API surface
-            2. **Check Existing Docs**: Find existing documentation that needs updating
-            3. **Update CLAUDE.md**: If architecture or conventions changed, update CLAUDE.md
-            4. **Update API Docs**: Update or create JSDoc/TSDoc comments for:
-               - Exported functions and classes
-               - Public interfaces and types
-               - Complex internal logic that needs explanation
-            5. **Update README**: If the changes affect user-facing features, update README.md
-            6. **Changelog**: Add entries to CHANGELOG.md for notable changes
-
-            ## Documentation Standards
-            - Keep CLAUDE.md under 40,000 characters
-            - Use JSDoc/TSDoc format for inline documentation
-            - Document the "why", not the "what" — code should explain itself
-            - Include usage examples for public APIs
-            - Don't document obvious things (getters, setters, trivial functions)
-            - Keep language concise and technical
-          allowed_tools: |
-            Read
-            Write
-            Edit
-            Glob
-            Grep
-            Bash(git diff, git log, git show)
-          timeout_minutes: 15
-
-      - name: Commit documentation updates
-        if: github.event_name == 'push'
+      - name: Generate documentation
+        id: docs
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          git config user.name "claude-ai[bot]"
-          git config user.email "claude-ai[bot]@users.noreply.github.com"
-          git add -A docs/ CLAUDE.md README.md CHANGELOG.md '*.md' || true
-          git diff --staged --quiet || git commit -m "docs: auto-update documentation for recent changes"
-          git push || true
+          PAYLOAD=$(jq -n \
+            --arg files "${{ steps.changes.outputs.files }}" \
+            --arg contents "${{ steps.changes.outputs.contents }}" \
+            '{
+              "contents": [{
+                "parts": [{
+                  "text": ("You are a technical documentation expert. Generate documentation for these source files.\n\nFiles:\n" + $files + "\n\nSource:\n" + $contents + "\n\nProvide:\n1. JSDoc/TSDoc comments for exported functions, interfaces, types\n2. A summary of what each module does\n3. Any suggested README updates\n\nDocument the why, not the what. Keep it concise.")
+                }]
+              }],
+              "generationConfig": {"maxOutputTokens": 4000}
+            }')
+
+          RESPONSE=$(curl -s "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$GEMINI_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD")
+
+          DOCS=$(echo "$RESPONSE" | jq -r '.candidates[0].content.parts[0].text // "Documentation generation failed. Check API key."')
+          EOF_MARKER=$(dd if=/dev/urandom bs=15 count=1 2>/dev/null | base64)
+          echo "docs<<$EOF_MARKER" >> $GITHUB_OUTPUT
+          echo "$DOCS" >> $GITHUB_OUTPUT
+          echo "$EOF_MARKER" >> $GITHUB_OUTPUT
+
+      - name: Post documentation suggestions
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = `## AI Documentation Suggestions\n\n${process.env.DOCS}\n\n---\n*Powered by Google Gemini 2.0 Flash (free tier)*`;
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body.slice(0, 65000)
+            });
+        env:
+          DOCS: ${{ steps.docs.outputs.docs }}
