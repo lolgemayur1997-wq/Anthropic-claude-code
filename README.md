@@ -11,6 +11,7 @@ Automated content and affiliate marketing system that you can manage entirely fr
 - **Social Media** - Auto-post to Twitter, Medium, Blogger
 - **Analytics** - Track views, clicks, and earnings
 - **GitHub Actions** - Fully automated daily content pipeline
+- **Pinterest Automation** - Auto-create pin images, schedule 25 pins/day, landing pages
 
 ## Quick Start (Phone Only)
 
@@ -50,6 +51,7 @@ content/      - Content generation engine & templates
 affiliate/    - Affiliate link management & tracking
 blog/         - Static site builder & themes
 social/       - Social media posting (Twitter, Medium, Blogger)
+pinterest/    - Pinterest pin automation (image gen, scheduling, analytics)
 analytics/    - Views, clicks, and earnings tracking
 scripts/      - Automation workflow entry points
 .github/      - GitHub Actions for daily automation
@@ -96,6 +98,30 @@ python scripts/daily_run.py
 # Build the blog
 python -m blog.builder
 ```
+
+## Pinterest Automation
+
+The Pinterest module generates eye-catching pin images and auto-posts them:
+
+```bash
+# Telegram bot commands
+/newpin        - Create a product, quote, or list pin
+/pinterest     - Pinterest menu
+/pinschedule   - View pin posting queue
+/pinstats      - View Pinterest analytics
+/boards        - Manage Pinterest boards
+```
+
+### Pin Types
+- **Product Pins** - Product showcase with image, price, features, CTA
+- **Quote Pins** - Tips and advice pins (great for engagement)
+- **List Pins** - Top-N listicle infographic pins
+
+### Setup Pinterest
+1. Create a Pinterest Business account (free)
+2. Go to developers.pinterest.com, create an app
+3. Get your access token
+4. Add `PINTEREST_ACCESS_TOKEN` to GitHub Secrets
 
 ## License
 

@@ -19,6 +19,9 @@ def main_menu():
             InlineKeyboardButton("📢 Post Social", callback_data="post_social"),
         ],
         [
+            InlineKeyboardButton("📌 Pinterest", callback_data="pinterest_menu"),
+        ],
+        [
             InlineKeyboardButton("⚙️ Settings", callback_data="settings"),
             InlineKeyboardButton("❓ Help", callback_data="help"),
         ],

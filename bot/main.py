@@ -16,6 +16,10 @@ from bot.handlers.affiliate import get_addlink_conversation, listlinks_command
 from bot.handlers.blog import publish_command, confirm_publish
 from bot.handlers.analytics import stats_command
 from bot.handlers.social import postnow_command, social_callback
+from bot.handlers.pinterest import (
+    get_newpin_conversation, pinterest_command, pinschedule_command,
+    pinstats_command, boards_command, pinterest_callback,
+)
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -55,6 +59,7 @@ def create_app():
     # Register conversation handlers (must be before simple handlers)
     app.add_handler(get_article_conversation())
     app.add_handler(get_addlink_conversation())
+    app.add_handler(get_newpin_conversation())
 
     # Register command handlers
     app.add_handler(CommandHandler("start", start_command))
@@ -63,10 +68,15 @@ def create_app():
     app.add_handler(CommandHandler("publish", publish_command))
     app.add_handler(CommandHandler("stats", stats_command))
     app.add_handler(CommandHandler("postnow", postnow_command))
+    app.add_handler(CommandHandler("pinterest", pinterest_command))
+    app.add_handler(CommandHandler("pinschedule", pinschedule_command))
+    app.add_handler(CommandHandler("pinstats", pinstats_command))
+    app.add_handler(CommandHandler("boards", boards_command))
 
     # Register callback handlers
     app.add_handler(CallbackQueryHandler(confirm_publish, pattern="^confirm_publish$"))
     app.add_handler(CallbackQueryHandler(social_callback, pattern="^social_"))
+    app.add_handler(CallbackQueryHandler(pinterest_callback, pattern="^pin_(?!new)|^pinterest_menu$"))
     app.add_handler(CallbackQueryHandler(menu_callback, pattern="^(main_menu|help|settings)$"))
 
     return app

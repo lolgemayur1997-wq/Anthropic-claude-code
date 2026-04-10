@@ -1,0 +1,56 @@
+pinterest:
+  access_token: ""  # Get from Pinterest Developer portal (free)
+  app_id: ""
+  app_secret: ""
+
+  # Pin posting limits
+  pins_per_day: 25
+  pins_per_batch: 8  # Pins per scheduled run (3 runs/day)
+  min_interval_seconds: 60  # Minimum gap between pins
+
+  # Default board prefix
+  board_prefix: "SmartPicks"
+
+  # Niches and boards mapping
+  boards:
+    tech_gadgets:
+      - "Best Tech Gadgets"
+      - "Budget Smartphones"
+      - "Earbuds & Headphones"
+      - "Smartwatch Deals"
+    kitchen:
+      - "Kitchen Essentials"
+      - "Best Kitchen Appliances"
+      - "Cooking Tools & Gadgets"
+    home_decor:
+      - "Home Decor Ideas"
+      - "Budget Home Makeover"
+      - "Smart Home Gadgets"
+    fashion:
+      - "Fashion Deals India"
+      - "Budget Fashion Finds"
+    fitness:
+      - "Fitness Equipment"
+      - "Workout Gear"
+      - "Healthy Living"
+
+  # Pin image settings
+  image:
+    width: 1000
+    height: 1500
+    quality: 85
+    format: "JPEG"
+    branding_text: "SmartPicks India"
+
+  # Posting schedule (IST hours)
+  schedule:
+    morning: "09:00"
+    afternoon: "14:00"
+    evening: "20:00"
+
+  # SEO settings
+  seo:
+    max_description_length: 500
+    max_hashtags: 20
+    include_price: true
+    include_cta: true
