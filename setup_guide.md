@@ -85,6 +85,44 @@ The GitHub Actions workflows will automatically:
 5. **Apply for AdSense** after 30+ articles
 6. **Engage on social media** - reply to comments, build community
 
+## Step 10: Set Up Pinterest (Bonus Income Stream)
+
+Pinterest pins drive traffic for months. Here's how to set it up:
+
+1. **Create a Pinterest Business Account** (free)
+   - Go to business.pinterest.com
+   - Sign up or convert your personal account
+
+2. **Create a Pinterest Developer App**
+   - Go to developers.pinterest.com
+   - Create a new app
+   - Generate an access token with these scopes:
+     - `boards:read`, `boards:write`
+     - `pins:read`, `pins:write`
+   - Copy your access token
+
+3. **Add Pinterest Secret to GitHub**
+   - Go to repo Settings > Secrets > Actions
+   - Add: `PINTEREST_ACCESS_TOKEN` = your token
+
+4. **Create Boards**
+   - Send `/boards` to your Telegram bot
+   - Or create boards manually on Pinterest
+   - Tip: Create 10-15 boards per niche with keyword-rich names
+
+5. **Start Pinning!**
+   - Send `/newpin` to your bot
+   - Choose: Product Pin, Quote Pin, or List Pin
+   - The system auto-generates beautiful 1000x1500px images
+   - Pins are scheduled 3x daily (9AM, 2PM, 8PM)
+
+**Pinterest Tips:**
+- Post 15-25 pins per day for maximum growth
+- Use keyword-rich descriptions (the bot does this automatically)
+- Pin to multiple boards for more reach
+- Quote/tip pins get high engagement and attract followers
+- Product pins drive affiliate clicks
+
 ## Troubleshooting
 
 **Bot not responding?**
