@@ -12,6 +12,8 @@ bun.lockb
 agents/config/watchlist.json
 agents/config/thresholds.json
 agents/config/holidays.txt
+# Dhan instrument-master cache (~20 MB, re-downloaded every 12h)
+agents/config/.dhan-instruments-cache.json
 
 # Build output
 dist/
