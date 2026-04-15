@@ -21,11 +21,31 @@ description: |
 > disclosures must come from public channels only (NSE/BSE announcements,
 > company filings, SEBI EDIFAR, regulator press releases).
 
+## Authoritative ruleset
+
+For **stock-options trades on NSE**, always defer to
+`.claude/rules/nse-fno-pre-trade.md`. That file encodes the exchange's own
+thresholds (ban at 95% MWPL, extra ELM, ASM, corp-action adjustments,
+European + physical settlement, auto-exercise, etc.). The `gates` in
+`config/thresholds.json` must never loosen those thresholds.
+
+Operator-invokable checks (all defined as slash commands):
+
+- `/check-fno-universe` — universe eligibility (rule §2)
+- `/check-contract-specs` — lot, expiry, DTE, style, settlement (rule §1)
+- `/check-ban-surveillance` — MWPL %, Extra ELM, ASM (rule §3)
+- `/check-corporate-actions` — earnings, splits, bonus, rights, mergers (§4)
+- `/check-liquidity` — ATM spread, OI vs lot, premium turnover, depth (§5)
+- `/check-iv-rv` — IV percentile vs 20/60d realized vol; buyer vs seller (§6)
+- `/check-margin` — SPAN + ELM + 1σ/2σ stress (§7)
+- `/pre-trade` — runs the full sequence as a single gate (rule §9 workflow)
+
 ## When to invoke
 
 - At **09:30–09:45 IST** after the opening range (ORB) has printed.
 - On explicit `/intraday-research` invocation.
 - Triggered by the 09:45 cron hook (see `scripts/run-intraday-research.sh`).
+- Before any stock-options trade: run `/pre-trade <symbol> <bias>` first.
 
 ## Activation (raw data → scored snapshot → report)
 

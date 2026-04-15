@@ -171,6 +171,22 @@ export function buildSnapshot(raw: RawMarketData): SymbolSnapshot {
     inFnoBan: raw.eventFlags.inFnoBan,
     resultWithinDays: raw.eventFlags.resultWithinDays,
     macroEventWithinMins: raw.eventFlags.macroEventWithinMins,
+    inOfficialFnoUniverse: raw.contractMeta?.inOfficialFnoUniverse ?? null,
+    lotSize: raw.contractMeta?.lotSize ?? null,
+    dteDays: raw.contractMeta?.dteDays ?? null,
+    style: raw.contractMeta?.style ?? null,
+    settlement: raw.contractMeta?.settlement ?? null,
+    mwplPct: raw.eventFlags.mwplPct,
+    inExtraElm: raw.eventFlags.inExtraElm,
+    inAsm: raw.eventFlags.inAsm,
+    corpActionWithinDays: raw.eventFlags.corpActionWithinDays,
+    atmSpreadPct: raw.optionChain?.atmSpreadPct ?? null,
+    atmOi: raw.optionChain?.atmOi ?? null,
+    atmPremiumTurnoverInr: raw.optionChain?.atmPremiumTurnoverInr ?? null,
+    ivPercentile: raw.optionChain?.ivPercentile ?? null,
+    atmIv: raw.optionChain?.atmIv ?? null,
+    rv20dAnnualizedPct: raw.volMargin?.rv20dAnnualizedPct ?? null,
+    marginUtilisationPct: raw.volMargin?.marginUtilisationPct ?? null,
     fetchedAt: new Date().toISOString(),
   };
 }
@@ -182,6 +198,13 @@ function flagsFromRaw(raw: RawMarketData): Partial<SymbolSnapshot> {
     inFnoBan: raw.eventFlags.inFnoBan,
     resultWithinDays: raw.eventFlags.resultWithinDays,
     macroEventWithinMins: raw.eventFlags.macroEventWithinMins,
+    inOfficialFnoUniverse: raw.contractMeta?.inOfficialFnoUniverse ?? null,
+    lotSize: raw.contractMeta?.lotSize ?? null,
+    dteDays: raw.contractMeta?.dteDays ?? null,
+    mwplPct: raw.eventFlags.mwplPct,
+    inExtraElm: raw.eventFlags.inExtraElm,
+    inAsm: raw.eventFlags.inAsm,
+    corpActionWithinDays: raw.eventFlags.corpActionWithinDays,
   };
 }
 

@@ -38,6 +38,15 @@ export interface RawOptionChain {
   oiBuildup: "long-build" | "short-build" | "long-unwind" | "short-cover" | null;
   unusualActivity: boolean | null;
   ivRank: number | null;
+  ivPercentile: number | null;
+  atmIv: number | null;
+  // ATM strike liquidity (rule §5)
+  atmSpreadPct: number | null;
+  atmOi: number | null;
+  atmPremiumTurnoverInr: number | null;
+  // Depth sanity
+  atmTopBidSize: number | null;
+  atmTopAskSize: number | null;
 }
 
 export interface RawEventFlags {
@@ -46,6 +55,31 @@ export interface RawEventFlags {
   macroEventWithinMins: number | null;
   exDateToday: boolean;
   agmToday: boolean;
+  // NSE F&O pre-trade rule §3, §4
+  mwplPct: number | null;              // open interest / MWPL × 100
+  inExtraElm: boolean;                 // +15% ELM active
+  inAsm: boolean;                      // additional surveillance margin
+  corpActionWithinDays: number | null; // nearest corporate action in days
+  corpActionType: string | null;       // "split" | "bonus" | "merger" | ...
+}
+
+// Rule §2: contract specification pulled from the daily NSE contract file.
+export interface RawContractMeta {
+  inOfficialFnoUniverse: boolean;
+  lotSize: number | null;
+  quantityFreeze: number | null;
+  expiry: string | null;               // YYYY-MM-DD
+  dteDays: number | null;
+  style: "European" | "American" | null;
+  settlement: "Physical" | "Cash" | null;
+}
+
+// Rule §6 + §7: realized vol and margin data for downstream gates.
+export interface RawVolMargin {
+  rv20dAnnualizedPct: number | null;   // trailing 20d realized vol, annualized %
+  rv60dAnnualizedPct: number | null;
+  marginRequiredInr: number | null;    // SPAN + ELM for intended structure
+  marginUtilisationPct: number | null; // vs account equity
 }
 
 export interface RawNews {
@@ -63,6 +97,8 @@ export interface RawMarketData {
   quote: RawQuote | null;
   avgDailyVolume: number | null; // for RVOL approximation
   optionChain: RawOptionChain | null; // required if segment === "options"
+  contractMeta: RawContractMeta | null; // required if segment !== "equity"
+  volMargin: RawVolMargin | null;
   news: RawNews | null;
   eventFlags: RawEventFlags;
 }
@@ -114,6 +150,24 @@ export interface SymbolSnapshot {
   resultWithinDays: number | null;
   macroEventWithinMins: number | null;
 
+  // NSE F&O pre-trade gates (rule §2–§7)
+  inOfficialFnoUniverse: boolean | null;
+  lotSize: number | null;
+  dteDays: number | null;
+  style: "European" | "American" | null;
+  settlement: "Physical" | "Cash" | null;
+  mwplPct: number | null;
+  inExtraElm: boolean;
+  inAsm: boolean;
+  corpActionWithinDays: number | null;
+  atmSpreadPct: number | null;
+  atmOi: number | null;
+  atmPremiumTurnoverInr: number | null;
+  ivPercentile: number | null;
+  atmIv: number | null;
+  rv20dAnnualizedPct: number | null;
+  marginUtilisationPct: number | null;
+
   // Raw timestamp of data
   fetchedAt: string;
 }
@@ -123,6 +177,35 @@ export interface Adapter {
   getIndiaVix(): Promise<number | null>;
   getSymbolSnapshot(symbol: string, segment: Segment): Promise<SymbolSnapshot>;
   emptySnapshot(symbol: string, segment: Segment): SymbolSnapshot;
+}
+
+/** All-UNKNOWN RawMarketData. Adapters compose onto this when data is
+ *  missing, so new fields don't force changes in every adapter. */
+export function emptyRawMarketData(symbol: string, segment: Segment): RawMarketData {
+  return {
+    symbol,
+    segment,
+    candles5m: [],
+    candles15m: [],
+    quote: null,
+    avgDailyVolume: null,
+    optionChain: null,
+    contractMeta: null,
+    volMargin: null,
+    news: null,
+    eventFlags: {
+      inFnoBan: false,
+      resultWithinDays: null,
+      macroEventWithinMins: null,
+      exDateToday: false,
+      agmToday: false,
+      mwplPct: null,
+      inExtraElm: false,
+      inAsm: false,
+      corpActionWithinDays: null,
+      corpActionType: null,
+    },
+  };
 }
 
 export function blankSnapshot(symbol: string, segment: Segment): SymbolSnapshot {
@@ -158,6 +241,22 @@ export function blankSnapshot(symbol: string, segment: Segment): SymbolSnapshot 
     inFnoBan: false,
     resultWithinDays: null,
     macroEventWithinMins: null,
+    inOfficialFnoUniverse: null,
+    lotSize: null,
+    dteDays: null,
+    style: null,
+    settlement: null,
+    mwplPct: null,
+    inExtraElm: false,
+    inAsm: false,
+    corpActionWithinDays: null,
+    atmSpreadPct: null,
+    atmOi: null,
+    atmPremiumTurnoverInr: null,
+    ivPercentile: null,
+    atmIv: null,
+    rv20dAnnualizedPct: null,
+    marginUtilisationPct: null,
     fetchedAt: new Date().toISOString(),
   };
 }

@@ -18,8 +18,8 @@
 import { buildSnapshot } from "../snapshot.ts";
 import {
   blankSnapshot,
+  emptyRawMarketData,
   type Adapter,
-  type RawMarketData,
   type Segment,
   type SymbolSnapshot,
 } from "./types.ts";
@@ -42,24 +42,7 @@ const upstox: Adapter = {
   async getSymbolSnapshot(symbol: string, segment: Segment): Promise<SymbolSnapshot> {
     requireCreds();
     // FILL IN: assemble RawMarketData and return buildSnapshot(raw).
-    const _raw: RawMarketData = {
-      symbol,
-      segment,
-      candles5m: [],
-      candles15m: [],
-      quote: null,
-      avgDailyVolume: null,
-      optionChain: null,
-      news: null,
-      eventFlags: {
-        inFnoBan: false,
-        resultWithinDays: null,
-        macroEventWithinMins: null,
-        exDateToday: false,
-        agmToday: false,
-      },
-    };
-    return buildSnapshot(_raw);
+    return buildSnapshot(emptyRawMarketData(symbol, segment));
   },
 
   emptySnapshot: blankSnapshot,

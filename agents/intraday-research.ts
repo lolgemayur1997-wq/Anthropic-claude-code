@@ -38,6 +38,16 @@ interface Thresholds {
     min_rvol_for_breakout: number;
     score_threshold: number;
     skip_on_result_within_days: number;
+    // NSE F&O pre-trade gates (see .claude/rules/nse-fno-pre-trade.md)
+    max_mwpl_pct: number;                 // §3 ban threshold (default 95)
+    skip_corp_action_within_days: number; // §4 (default 2)
+    max_atm_spread_pct: number;           // §5 (default 0.5)
+    min_oi_lot_multiple: number;          // §5 (default 5)
+    min_dte_for_short_premium: number;    // §1 (default 2)
+    gate_extra_elm_for_short: boolean;    // §3 (default true)
+    gate_asm: boolean;                    // §3 (default true)
+    require_in_fno_universe_for_options: boolean; // §2 (default true)
+    max_margin_utilisation_pct: number;   // §7 (default 25)
   };
   sizing: {
     account_equity_inr: number;
@@ -160,16 +170,70 @@ function evaluateGates(
   vix: number | null,
 ): string[] {
   const reasons: string[] = [];
+  // --- General gates ---
   if (vix !== null && vix > t.gates.vix_ceiling) reasons.push(`VIX ${vix} > ceiling ${t.gates.vix_ceiling}`);
-  if (s.inFnoBan) reasons.push("symbol in F&O ban list");
+  if (s.inFnoBan) reasons.push("F&O ban list");
   if (s.resultWithinDays !== null && s.resultWithinDays <= t.gates.skip_on_result_within_days) {
     reasons.push(`result within ${s.resultWithinDays} day(s)`);
   }
   if (s.spreadPct !== null && s.spreadPct > t.gates.spread_ceiling_pct) {
-    reasons.push(`spread ${s.spreadPct}% > ceiling ${t.gates.spread_ceiling_pct}%`);
+    reasons.push(`spread ${s.spreadPct.toFixed(2)}% > ${t.gates.spread_ceiling_pct}%`);
   }
   if (s.macroEventWithinMins !== null && s.macroEventWithinMins <= 60) {
-    reasons.push(`macro event in ${s.macroEventWithinMins} mins`);
+    reasons.push(`macro event in ${s.macroEventWithinMins}m`);
+  }
+
+  // --- NSE F&O pre-trade gates (rule §2–§7) ---
+  // §2: options require the symbol to be in the official F&O universe
+  if (
+    s.segment === "options" &&
+    t.gates.require_in_fno_universe_for_options &&
+    s.inOfficialFnoUniverse === false
+  ) {
+    reasons.push("not in NSE F&O universe");
+  }
+  // §3: MWPL ban threshold
+  if (s.mwplPct !== null && s.mwplPct >= t.gates.max_mwpl_pct) {
+    reasons.push(`MWPL ${s.mwplPct.toFixed(1)}% >= ${t.gates.max_mwpl_pct}% (ban)`);
+  }
+  // §3: ASM always gated
+  if (t.gates.gate_asm && s.inAsm) reasons.push("under ASM");
+  // §3: Extra ELM gated for short-premium structures
+  if (t.gates.gate_extra_elm_for_short && s.inExtraElm && s.bias === "short") {
+    reasons.push("extra ELM + short bias");
+  }
+  // §4: corporate action horizon
+  if (
+    s.corpActionWithinDays !== null &&
+    s.corpActionWithinDays <= t.gates.skip_corp_action_within_days
+  ) {
+    reasons.push(`corp action in ${s.corpActionWithinDays}d`);
+  }
+  // §5: ATM spread & OI quality for options
+  if (s.segment === "options") {
+    if (s.atmSpreadPct !== null && s.atmSpreadPct > t.gates.max_atm_spread_pct) {
+      reasons.push(`ATM spread ${s.atmSpreadPct.toFixed(2)}% > ${t.gates.max_atm_spread_pct}%`);
+    }
+    if (s.atmOi !== null && s.lotSize !== null) {
+      if (s.atmOi < s.lotSize * t.gates.min_oi_lot_multiple) {
+        reasons.push(`ATM OI ${s.atmOi} < ${t.gates.min_oi_lot_multiple}× lot`);
+      }
+    }
+    // §1: never hold short stock options near expiry
+    if (
+      s.bias === "short" &&
+      s.dteDays !== null &&
+      s.dteDays < t.gates.min_dte_for_short_premium
+    ) {
+      reasons.push(`DTE ${s.dteDays} < ${t.gates.min_dte_for_short_premium} for short-premium`);
+    }
+  }
+  // §7: margin utilisation cap
+  if (
+    s.marginUtilisationPct !== null &&
+    s.marginUtilisationPct > t.gates.max_margin_utilisation_pct
+  ) {
+    reasons.push(`margin util ${s.marginUtilisationPct.toFixed(1)}% > ${t.gates.max_margin_utilisation_pct}%`);
   }
   return reasons;
 }

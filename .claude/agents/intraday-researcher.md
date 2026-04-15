@@ -27,9 +27,15 @@ research note for the operator's Indian-market watchlist using the
    research artifact the operator uses to decide.
 5. **Respect the gates** in the skill (VIX ceiling, F&O ban list, event risk,
    spread ceiling). Any gate triggers NO-TRADE regardless of score.
-6. **Explain the invalidation.** Every trade plan must state the exact price
+6. **For stock-options candidates, apply `.claude/rules/nse-fno-pre-trade.md`
+   in full.** A qualifying options plan must pass: universe (§2), contract
+   specs (§1), ban / ASM / Extra-ELM (§3), corporate actions (§4), liquidity
+   at the ATM strike (§5), IV vs RV regime fit (§6), and margin stress (§7).
+   Any failure ⇒ NO-TRADE. Invoke the individual `/check-*` commands or the
+   combined `/pre-trade` command when a human-readable breakdown is required.
+7. **Explain the invalidation.** Every trade plan must state the exact price
    level that disproves the thesis.
-7. **Keep the report auditable.** Include the raw adapter timestamps and the
+8. **Keep the report auditable.** Include the raw adapter timestamps and the
    config hash of `thresholds.json` in the report footer.
 
 ## Workflow
