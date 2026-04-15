@@ -10,7 +10,10 @@
     "docs": "bun run orchestrator.ts --stage docs",
     "verify": "bun run orchestrator.ts --stage verify",
     "intraday": "bun run intraday-research.ts",
-    "intraday:mock": "bun run intraday-research.ts --adapter mock --dry-run"
+    "intraday:mock": "bun run intraday-research.ts --adapter mock --dry-run",
+    "test": "bun test",
+    "test:indicators": "bun test indicators",
+    "typecheck": "bunx tsc"
   },
   "devDependencies": {
     "typescript": "^5.5.0",

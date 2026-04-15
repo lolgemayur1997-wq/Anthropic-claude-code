@@ -1,19 +1,33 @@
 /**
- * Kite Connect adapter STUB.
+ * Kite Connect (Zerodha) adapter.
  *
- * To activate: install the kiteconnect SDK and fill in the TODOs below with
- * real API calls. This stub intentionally does NOT fetch data — it returns
- * UNKNOWN snapshots so the runner can be exercised end-to-end without a live
- * broker key.
+ * To activate:
+ *   1. `bun add kiteconnect` (or use fetch directly against api.kite.trade)
+ *   2. Set env: KITE_API_KEY + KITE_ACCESS_TOKEN (access token rotates daily)
+ *   3. Fill the two functions below. Everything else is shared.
  *
- * Env:
- *   KITE_API_KEY
- *   KITE_ACCESS_TOKEN
+ * Endpoints you need:
+ *   GET  /quote?i=NSE:RELIANCE                  → LTP + OHLC + depth + OI
+ *   GET  /quote/ohlc?i=...                      → faster OHLC only
+ *   GET  /instruments/historical/{token}/5minute?from=...&to=...&oi=1
+ *                                               → historical candles
+ *   GET  /instruments                           → full instrument CSV (cache!)
+ *
+ * Auth header:
+ *   Authorization: token <KITE_API_KEY>:<KITE_ACCESS_TOKEN>
+ *   X-Kite-Version: 3
  *
  * Docs: https://kite.trade/docs/connect/v3/
  */
 
-import { blankSnapshot, type Adapter, type Segment, type SymbolSnapshot } from "./types.ts";
+import { buildSnapshot } from "../snapshot.ts";
+import {
+  blankSnapshot,
+  type Adapter,
+  type RawMarketData,
+  type Segment,
+  type SymbolSnapshot,
+} from "./types.ts";
 
 const KITE_API_KEY = process.env.KITE_API_KEY;
 const KITE_ACCESS_TOKEN = process.env.KITE_ACCESS_TOKEN;
@@ -21,28 +35,58 @@ const KITE_ACCESS_TOKEN = process.env.KITE_ACCESS_TOKEN;
 function requireCreds(): void {
   if (!KITE_API_KEY || !KITE_ACCESS_TOKEN) {
     throw new Error(
-      "Kite adapter requires KITE_API_KEY and KITE_ACCESS_TOKEN env vars. See agents/adapters/kite.ts",
+      "Kite adapter requires KITE_API_KEY and KITE_ACCESS_TOKEN env vars.",
     );
   }
 }
 
 const kite: Adapter = {
   name: "kite",
+
   async getIndiaVix(): Promise<number | null> {
     requireCreds();
-    // TODO: call GET /quote?i=NSE:INDIA VIX and return .last_price
+    // FILL IN:
+    //   const r = await kiteGet("/quote/ohlc?i=NSE:INDIA VIX");
+    //   return r.data["NSE:INDIA VIX"].last_price;
     return null;
   },
+
   async getSymbolSnapshot(symbol: string, segment: Segment): Promise<SymbolSnapshot> {
     requireCreds();
-    // TODO: fetch:
-    //   - /quote/ohlc for LTP + day H/L + prev close
-    //   - /instruments/historical/{token}/5minute for ORB, ATR, VWAP, indicators
-    //   - /quote for depth (spread)
-    //   - /instruments for F&O ban list (from NSE daily file) + option chain
-    //   - adapter should compute indicator + score values here
-    return blankSnapshot(symbol, segment);
+    // FILL IN: assemble RawMarketData, then hand to buildSnapshot.
+    //
+    //   const raw: RawMarketData = {
+    //     symbol, segment,
+    //     candles5m:  await kiteHistorical(token, "5minute",  todayStart, now),
+    //     candles15m: await kiteHistorical(token, "15minute", yesterday, now),
+    //     quote:      await kiteQuote(`NSE:${symbol}`),
+    //     avgDailyVolume: await kiteAvgVolume(token, 20),
+    //     optionChain: segment === "options" ? await kiteOptionChain(symbol) : null,
+    //     news: null,            // plug in your news source
+    //     eventFlags: await kiteEventFlags(symbol),
+    //   };
+    //   return buildSnapshot(raw);
+
+    const _raw: RawMarketData = {
+      symbol,
+      segment,
+      candles5m: [],
+      candles15m: [],
+      quote: null,
+      avgDailyVolume: null,
+      optionChain: null,
+      news: null,
+      eventFlags: {
+        inFnoBan: false,
+        resultWithinDays: null,
+        macroEventWithinMins: null,
+        exDateToday: false,
+        agmToday: false,
+      },
+    };
+    return buildSnapshot(_raw);
   },
+
   emptySnapshot: blankSnapshot,
 };
 

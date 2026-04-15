@@ -12,6 +12,61 @@ export type Segment = "equity" | "futures" | "options";
 
 export type Bias = "long" | "short" | null;
 
+// --- Raw shapes every adapter must assemble before calling buildSnapshot ---
+
+export interface RawCandle {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export interface RawQuote {
+  ltp: number;
+  prevClose: number;
+  dayHigh: number;
+  dayLow: number;
+  bid: number | null;
+  ask: number | null;
+}
+
+export interface RawOptionChain {
+  pcr: number | null;
+  maxPainStrike: number | null;
+  oiBuildup: "long-build" | "short-build" | "long-unwind" | "short-cover" | null;
+  unusualActivity: boolean | null;
+  ivRank: number | null;
+}
+
+export interface RawEventFlags {
+  inFnoBan: boolean;
+  resultWithinDays: number | null;
+  macroEventWithinMins: number | null;
+  exDateToday: boolean;
+  agmToday: boolean;
+}
+
+export interface RawNews {
+  positive: boolean | null;
+  negative: boolean | null;
+  bulkBlockDealFavorable: boolean | null;
+  corporateActionToday: boolean | null;
+}
+
+export interface RawMarketData {
+  symbol: string;
+  segment: Segment;
+  candles5m: RawCandle[];
+  candles15m: RawCandle[];
+  quote: RawQuote | null;
+  avgDailyVolume: number | null; // for RVOL approximation
+  optionChain: RawOptionChain | null; // required if segment === "options"
+  news: RawNews | null;
+  eventFlags: RawEventFlags;
+}
+
 export interface SymbolSnapshot {
   symbol: string;
   segment: Segment;

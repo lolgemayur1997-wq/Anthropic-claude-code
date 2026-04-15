@@ -1,13 +1,28 @@
 /**
- * Upstox adapter STUB.
+ * Upstox adapter.
  *
- * Env:
- *   UPSTOX_ACCESS_TOKEN
+ * Env: UPSTOX_ACCESS_TOKEN
+ *
+ * Endpoints:
+ *   GET /market-quote/ltp?instrument_key=NSE_EQ|INE...
+ *   GET /market-quote/ohlc?instrument_key=...
+ *   GET /historical-candle/intraday/{instrument_key}/1minute
+ *   GET /option/chain?instrument_key=...&expiry_date=...
+ *
+ * Auth header:
+ *   Authorization: Bearer <UPSTOX_ACCESS_TOKEN>
  *
  * Docs: https://upstox.com/developer/api-documentation/
  */
 
-import { blankSnapshot, type Adapter, type Segment, type SymbolSnapshot } from "./types.ts";
+import { buildSnapshot } from "../snapshot.ts";
+import {
+  blankSnapshot,
+  type Adapter,
+  type RawMarketData,
+  type Segment,
+  type SymbolSnapshot,
+} from "./types.ts";
 
 function requireCreds(): void {
   if (!process.env.UPSTOX_ACCESS_TOKEN) {
@@ -17,16 +32,36 @@ function requireCreds(): void {
 
 const upstox: Adapter = {
   name: "upstox",
+
   async getIndiaVix(): Promise<number | null> {
     requireCreds();
-    // TODO: GET /market-quote/ltp?instrument_key=NSE_INDEX|India VIX
+    // FILL IN: fetch LTP for "NSE_INDEX|India VIX"
     return null;
   },
+
   async getSymbolSnapshot(symbol: string, segment: Segment): Promise<SymbolSnapshot> {
     requireCreds();
-    // TODO: /market-quote/ohlc + /historical-candle/intraday + /option/chain
-    return blankSnapshot(symbol, segment);
+    // FILL IN: assemble RawMarketData and return buildSnapshot(raw).
+    const _raw: RawMarketData = {
+      symbol,
+      segment,
+      candles5m: [],
+      candles15m: [],
+      quote: null,
+      avgDailyVolume: null,
+      optionChain: null,
+      news: null,
+      eventFlags: {
+        inFnoBan: false,
+        resultWithinDays: null,
+        macroEventWithinMins: null,
+        exDateToday: false,
+        agmToday: false,
+      },
+    };
+    return buildSnapshot(_raw);
   },
+
   emptySnapshot: blankSnapshot,
 };
 

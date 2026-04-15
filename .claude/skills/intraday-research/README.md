@@ -19,39 +19,55 @@ adapter can't fetch a required field, that symbol is gated to **NO-TRADE**.
 The output is a research artifact for the operator — entries, stops, and
 targets are derived from the data you feed in, not invented by an LLM.
 
+## Architecture
+
+```
+broker adapter → RawMarketData → buildSnapshot() → SymbolSnapshot → runner → report + Telegram
+                                       │
+                                       ├─ indicators.ts  (pure, unit-tested)
+                                       └─ scoring.ts     (pure, section weights)
+```
+
+Adapter authors only implement broker-specific raw-data plumbing. All
+analysis (indicators, scoring, gates, trade-plan math, report rendering) is
+shared code tested via `bun test`.
+
 ## Bootstrap
 
 ```bash
 # 1. Install deps
 cd agents && bun install && cd ..
 
-# 2. Make your config (gitignored)
+# 2. Copy sample config (gitignored)
 cp agents/config/watchlist.sample.json agents/config/watchlist.json
 cp agents/config/thresholds.sample.json agents/config/thresholds.json
+cp .env.intraday.sample .env.intraday    # then fill in
 
-# 3. Dry-run with the mock adapter (everything UNKNOWN -> NO-TRADE)
+# 3. Run tests (indicators)
+cd agents && bun test indicators && cd ..
+
+# 4. Dry-run with mock adapter (everything UNKNOWN → NO-TRADE)
 bun run agents/intraday-research.ts --adapter mock --dry-run
 
-# 4. Wire your broker adapter — edit one of:
-#    agents/adapters/kite.ts
-#    agents/adapters/upstox.ts
-#    agents/adapters/dhan.ts
+# 5. Wire ONE broker adapter. Each stub has TWO functions marked "FILL IN":
+#    agents/adapters/kite.ts     (Zerodha Kite Connect)
+#    agents/adapters/upstox.ts   (Upstox)
+#    agents/adapters/dhan.ts     (Dhan)
+#
+#    Each fill-in ends with `return buildSnapshot(raw)`. Nothing else to do.
 
-# 5. Put creds in a gitignored file
-cat > .env.intraday <<'EOF'
-INTRADAY_ADAPTER=kite
-KITE_API_KEY=...
-KITE_ACCESS_TOKEN=...
-# Optional notifications:
-# INTRADAY_NTFY_TOPIC=my-private-topic
-# INTRADAY_TELEGRAM_BOT=123:abc
-# INTRADAY_TELEGRAM_CHAT=...
-EOF
+# 6. Set INTRADAY_ADAPTER in .env.intraday to the one you wired.
 
-# 6. Install the 09:45 IST cron
+# 7. Telegram push:
+#    - Message @BotFather → /newbot → copy token into TELEGRAM_BOT_TOKEN
+#    - Start a chat with your bot
+#    - Hit https://api.telegram.org/bot<TOKEN>/getUpdates → copy chat.id
+#      into TELEGRAM_CHAT_ID
+
+# 8. Install the 09:45 IST cron (weekdays only, Asia/Kolkata TZ)
 bash scripts/install-cron.sh
 
-# 7. Verify the wrapper end-to-end
+# 9. End-to-end smoke test (runs the wrapper once, sends to Telegram)
 bash scripts/run-intraday-research.sh
 ```
 

@@ -27,6 +27,28 @@ description: |
 - On explicit `/intraday-research` invocation.
 - Triggered by the 09:45 cron hook (see `scripts/run-intraday-research.sh`).
 
+## Activation (raw data → scored snapshot → report)
+
+The runner is broker-agnostic. The data pipeline has one choke-point:
+
+```
+broker adapter → RawMarketData → buildSnapshot() → SymbolSnapshot → runner → report
+                                       │
+                                       ├─ indicators.ts  (EMA, RSI, MACD, VWAP,
+                                       │                  ATR, Supertrend, Bollinger)
+                                       └─ scoring.ts     (section-weighted 0..1 scores)
+```
+
+To enable live data you implement **two functions** on one adapter
+(`agents/adapters/{kite,upstox,dhan}.ts`):
+
+1. `getIndiaVix()` — return India VIX LTP.
+2. `getSymbolSnapshot(symbol, segment)` — fetch raw candles + quote + OI,
+   assemble a `RawMarketData`, return `buildSnapshot(raw)`.
+
+Everything downstream — indicator math, scoring, gates, trade-plan
+generation, report rendering, Telegram delivery — is shared and tested.
+
 ## Inputs
 
 The runner expects the following from the configured adapter:
