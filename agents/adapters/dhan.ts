@@ -33,6 +33,7 @@ import {
   fetchExpiryList,
   fetchIntradayCandles,
   fetchLtp,
+  fetchMarginRequired,
   fetchOptionChain,
   fetchQuote,
   findEquity,
@@ -209,6 +210,19 @@ async function snapshotOptions(
   const atmIv = atmCall?.iv ?? null;
   const atmPremiumTurnoverInr =
     atmCall && lotSize ? atmCall.volume * lotSize * atmCall.ltp : null;
+  const atmTopBidSize = atmCall?.topBidQty ?? null;
+  const atmTopAskSize = atmCall?.topAskQty ?? null;
+
+  // OI buildup classification — needs prior-session OI + price direction.
+  const prevDayCloseForOi = cDaily.length >= 2 ? cDaily[cDaily.length - 2]!.close : null;
+  const oiBuildup = classifyOiBuildup({
+    atmCallOi: atmCall?.oi ?? null,
+    atmCallPrevOi: atmCall?.previousOi ?? null,
+    atmPutOi: atmRow?.put?.oi ?? null,
+    atmPutPrevOi: atmRow?.put?.previousOi ?? null,
+    underlyingLtp: spot,
+    underlyingPrevClose: prevDayCloseForOi,
+  });
 
   // 5. Prior-day closes / high / low from daily history.
   const todayStart = new Date(today + "T00:00:00+05:30").getTime() / 1000;
@@ -222,6 +236,35 @@ async function snapshotOptions(
 
   // 7. Max pain (strike minimizing total intrinsic of all outstanding options).
   const maxPainStrike = computeMaxPain(chain.rows);
+
+  // 8. Margin — call /v2/margincalculator for a 1-lot ATM CE BUY (indicative).
+  //    Non-fatal: if the call fails (Data API not enabled for margin endpoint,
+  //    rate limit, etc.) fall through with null volMargin.
+  let volMargin: RawMarketData["volMargin"] = null;
+  if (atmCall && atmOpt && lotSize) {
+    try {
+      const margin = await fetchMarginRequired(cfg, {
+        securityId: atmOpt.securityId,
+        exchangeSegment: "NSE_FNO",
+        transactionType: "BUY",
+        quantity: lotSize,
+        productType: "INTRADAY",
+        price: atmCall.ltp,
+      });
+      if (margin) {
+        const equity = Number(process.env.INTRADAY_ACCOUNT_EQUITY_INR ?? 0);
+        volMargin = {
+          rv20dAnnualizedPct: null,
+          rv60dAnnualizedPct: null,
+          marginRequiredInr: margin.totalMargin,
+          marginUtilisationPct:
+            equity > 0 ? (margin.totalMargin / equity) * 100 : null,
+        };
+      }
+    } catch {
+      // swallow — margin is best-effort
+    }
+  }
 
   return {
     symbol: underlyingSymbol,
@@ -244,7 +287,7 @@ async function snapshotOptions(
     optionChain: {
       pcr,
       maxPainStrike,
-      oiBuildup: null,
+      oiBuildup,
       unusualActivity: null,
       ivRank: null,
       ivPercentile: null,
@@ -252,8 +295,8 @@ async function snapshotOptions(
       atmSpreadPct,
       atmOi,
       atmPremiumTurnoverInr,
-      atmTopBidSize: null,
-      atmTopAskSize: null,
+      atmTopBidSize,
+      atmTopAskSize,
     },
     contractMeta: {
       inOfficialFnoUniverse: atmOpt !== null,
@@ -264,7 +307,7 @@ async function snapshotOptions(
       style: "European",
       settlement: "Cash",
     },
-    volMargin: null,
+    volMargin,
     news: null,
     eventFlags: {
       inFnoBan: false,
@@ -279,6 +322,63 @@ async function snapshotOptions(
       corpActionType: null,
     },
   };
+}
+
+/**
+ * Classify today's OI change against yesterday's, combined with price
+ * direction, into the classic four states used by scoring.ts::scoreOptions:
+ *
+ *   price ↑ + OI ↑ → long-build   (new longs added, price rose)
+ *   price ↑ + OI ↓ → short-cover  (shorts bought back, drove price up)
+ *   price ↓ + OI ↑ → short-build  (new shorts added, price fell)
+ *   price ↓ + OI ↓ → long-unwind  (longs closed, price fell)
+ *
+ * Uses the ATM CE as the proxy for directional OI; a fuller implementation
+ * could use delta-weighted sum across the chain. For the nearest-strike
+ * classifier this is standard NSE desk reading.
+ *
+ * Returns null if any required input is missing or price/OI barely moved
+ * (below configurable noise threshold).
+ */
+export function classifyOiBuildup(i: {
+  atmCallOi: number | null;
+  atmCallPrevOi: number | null;
+  atmPutOi: number | null;
+  atmPutPrevOi: number | null;
+  underlyingLtp: number;
+  underlyingPrevClose: number | null;
+  priceNoisePct?: number;
+  oiNoisePct?: number;
+}): "long-build" | "short-build" | "long-unwind" | "short-cover" | null {
+  const priceNoise = i.priceNoisePct ?? 0.05;
+  const oiNoise = i.oiNoisePct ?? 2;
+  if (
+    i.underlyingPrevClose === null ||
+    i.underlyingPrevClose === 0 ||
+    i.atmCallOi === null ||
+    i.atmCallPrevOi === null ||
+    i.atmCallPrevOi === 0
+  ) {
+    return null;
+  }
+  const priceChangePct =
+    ((i.underlyingLtp - i.underlyingPrevClose) / i.underlyingPrevClose) * 100;
+  // Direction of OI — use the dominant side (call for uptrend, put for down).
+  const callOiPct = ((i.atmCallOi - i.atmCallPrevOi) / i.atmCallPrevOi) * 100;
+  const putOiPct =
+    i.atmPutOi !== null && i.atmPutPrevOi !== null && i.atmPutPrevOi !== 0
+      ? ((i.atmPutOi - i.atmPutPrevOi) / i.atmPutPrevOi) * 100
+      : 0;
+  // For an up-day we read call-side OI direction; for a down-day, put-side.
+  if (Math.abs(priceChangePct) < priceNoise) return null;
+  const priceUp = priceChangePct > 0;
+  const relevantOiPct = priceUp ? callOiPct : putOiPct;
+  if (Math.abs(relevantOiPct) < oiNoise) return null;
+  const oiUp = relevantOiPct > 0;
+  if (priceUp && oiUp) return "long-build";
+  if (priceUp && !oiUp) return "short-cover";
+  if (!priceUp && oiUp) return "short-build";
+  return "long-unwind";
 }
 
 /** Compute max-pain strike from an option chain: the strike at which total

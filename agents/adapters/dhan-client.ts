@@ -18,13 +18,22 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "no
 import { dirname, join } from "node:path";
 
 const BASE_URL = "https://api.dhan.co";
-const INSTRUMENT_MASTER_URL = "https://images.dhan.co/api-data/api-scrip-master-detailed.csv";
+// Compact CSV matches our SEM_* column parser. Detailed uses different names.
+const INSTRUMENT_MASTER_URL = "https://images.dhan.co/api-data/api-scrip-master.csv";
 const INSTRUMENT_CACHE_PATH = join(
   process.cwd(),
   "agents/config/.dhan-instruments-cache.json",
 );
 const INSTRUMENT_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
-const MIN_REQUEST_GAP_MS = 100;
+
+/** Per-category rate-limit gaps (ms). Values from dhanhq.co/docs/v2/ docs. */
+const RATE_GAP_MS = {
+  quote: 1000, // /v2/marketfeed/{ltp,ohlc,quote} — 1 req/sec
+  chain: 3000, // /v2/optionchain, /v2/optionchain/expirylist — 1 unique / 3s
+  data: 200,   // historical charts + generic data APIs — 5 req/sec
+} as const;
+
+type RateCategory = keyof typeof RATE_GAP_MS;
 
 // --- Config ---
 
@@ -48,16 +57,17 @@ export function loadConfig(): DhanConfig {
 
 // --- Request helper ---
 
-let lastRequestAt = 0;
+const lastByCategory: Record<RateCategory, number> = { quote: 0, chain: 0, data: 0 };
 
-async function throttle(): Promise<void> {
-  const elapsed = Date.now() - lastRequestAt;
-  const wait = MIN_REQUEST_GAP_MS - elapsed;
+async function throttle(category: RateCategory): Promise<void> {
+  const gap = RATE_GAP_MS[category];
+  const wait = gap - (Date.now() - lastByCategory[category]);
   if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-  lastRequestAt = Date.now();
+  lastByCategory[category] = Date.now();
 }
 
 interface RequestOptions {
+  category: RateCategory;
   method?: "GET" | "POST";
   path: string;
   body?: unknown;
@@ -66,12 +76,12 @@ interface RequestOptions {
 }
 
 async function request<T>(cfg: DhanConfig, opts: RequestOptions): Promise<T> {
-  const { method = "POST", path, body, timeoutMs = 15000, retries = 2 } = opts;
+  const { category, method = "POST", path, body, timeoutMs = 15000, retries = 2 } = opts;
   const url = `${BASE_URL}${path}`;
   let lastError: unknown = new Error("Dhan request never executed");
 
   for (let attempt = 0; attempt <= retries; attempt++) {
-    await throttle();
+    await throttle(category);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
@@ -277,6 +287,16 @@ export function findFrontMonthAtm(
 
 // --- Market feed endpoints ---
 
+/** Dhan marketfeed request bodies expect security IDs as integers. Our
+ *  instrument master stores them as strings. Convert at the edge. */
+function asIntegerBody(instruments: Record<string, string[]>): Record<string, number[]> {
+  const out: Record<string, number[]> = {};
+  for (const [seg, ids] of Object.entries(instruments)) {
+    out[seg] = ids.map((id) => Number(id)).filter((n) => Number.isFinite(n));
+  }
+  return out;
+}
+
 interface LtpResponse {
   data: Record<string, Record<string, { last_price: number }>>;
 }
@@ -286,8 +306,9 @@ export async function fetchLtp(
   instruments: Record<string, string[]>,
 ): Promise<Record<string, Record<string, number>>> {
   const res = await request<LtpResponse>(cfg, {
+    category: "quote",
     path: "/v2/marketfeed/ltp",
-    body: instruments,
+    body: asIntegerBody(instruments),
   });
   const out: Record<string, Record<string, number>> = {};
   for (const [seg, ids] of Object.entries(res.data ?? {})) {
@@ -335,8 +356,9 @@ export async function fetchQuote(
   instruments: Record<string, string[]>,
 ): Promise<Record<string, Record<string, DhanQuote>>> {
   const res = await request<QuoteResponse>(cfg, {
+    category: "quote",
     path: "/v2/marketfeed/quote",
-    body: instruments,
+    body: asIntegerBody(instruments),
   });
   const out: Record<string, Record<string, DhanQuote>> = {};
   for (const [seg, ids] of Object.entries(res.data ?? {})) {
@@ -394,6 +416,12 @@ function parseChartsResponse(r: ChartsResponse): DhanCandle[] {
   return out;
 }
 
+/** Ensures "YYYY-MM-DD" becomes "YYYY-MM-DD HH:MM:SS" as Dhan requires for
+ *  intraday charts. If caller already passes a datetime, returns unchanged. */
+function ensureDateTime(d: string, defaultTime: string): string {
+  return /^\d{4}-\d{2}-\d{2}$/.test(d) ? `${d} ${defaultTime}` : d;
+}
+
 export async function fetchIntradayCandles(
   cfg: DhanConfig,
   securityId: string,
@@ -404,14 +432,15 @@ export async function fetchIntradayCandles(
   toDate: string,
 ): Promise<DhanCandle[]> {
   const r = await request<ChartsResponse>(cfg, {
+    category: "data",
     path: "/v2/charts/intraday",
     body: {
       securityId,
       exchangeSegment,
       instrument: instrumentType,
       interval: String(intervalMin),
-      fromDate,
-      toDate,
+      fromDate: ensureDateTime(fromDate, "09:15:00"),
+      toDate: ensureDateTime(toDate, "15:30:00"),
     },
   });
   return parseChartsResponse(r);
@@ -426,6 +455,7 @@ export async function fetchDailyCandles(
   toDate: string,
 ): Promise<DhanCandle[]> {
   const r = await request<ChartsResponse>(cfg, {
+    category: "data",
     path: "/v2/charts/historical",
     body: {
       securityId,
@@ -438,6 +468,57 @@ export async function fetchDailyCandles(
   return parseChartsResponse(r);
 }
 
+// --- Margin calculator ---
+
+export interface DhanMargin {
+  spanMargin: number;
+  exposureMargin: number;
+  totalMargin: number;
+  availableBalance: number | null;
+}
+
+interface MarginCalcResponse {
+  spanMargin?: number;
+  exposureMargin?: number;
+  totalMargin?: number;
+  availableBalance?: number;
+}
+
+export async function fetchMarginRequired(
+  cfg: DhanConfig,
+  params: {
+    securityId: string;
+    exchangeSegment: string;
+    transactionType: "BUY" | "SELL";
+    quantity: number;
+    productType: "INTRADAY" | "MARGIN" | "MTF" | "CO" | "BO" | "CNC";
+    price: number;
+    triggerPrice?: number;
+  },
+): Promise<DhanMargin | null> {
+  const r = await request<MarginCalcResponse>(cfg, {
+    category: "data",
+    path: "/v2/margincalculator",
+    body: {
+      dhanClientId: cfg.clientId,
+      exchangeSegment: params.exchangeSegment,
+      transactionType: params.transactionType,
+      quantity: params.quantity,
+      productType: params.productType,
+      securityId: params.securityId,
+      price: params.price,
+      triggerPrice: params.triggerPrice ?? 0,
+    },
+  });
+  if (r.totalMargin === undefined) return null;
+  return {
+    spanMargin: r.spanMargin ?? 0,
+    exposureMargin: r.exposureMargin ?? 0,
+    totalMargin: r.totalMargin,
+    availableBalance: r.availableBalance ?? null,
+  };
+}
+
 // --- Option chain ---
 
 export interface DhanOptionLeg {
@@ -447,6 +528,14 @@ export interface DhanOptionLeg {
   volume: number;
   bid: number | null;
   ask: number | null;
+  // Fields Dhan returns that we were discarding. Nullable because older
+  // Dhan deployments (or some segments) may not populate them.
+  previousOi: number | null;
+  previousVolume: number | null;
+  previousClose: number | null;
+  topBidQty: number | null;
+  topAskQty: number | null;
+  greeks: { delta: number; gamma: number; theta: number; vega: number } | null;
 }
 
 export interface DhanOptionChainRow {
@@ -460,30 +549,52 @@ export interface DhanOptionChain {
   rows: DhanOptionChainRow[];
 }
 
+interface OptionChainLegResponse {
+  last_price: number;
+  volume: number;
+  oi: number;
+  implied_volatility: number;
+  top_bid_price?: number;
+  top_ask_price?: number;
+  top_bid_quantity?: number;
+  top_ask_quantity?: number;
+  previous_oi?: number;
+  previous_volume?: number;
+  previous_close_price?: number;
+  greeks?: { delta?: number; gamma?: number; theta?: number; vega?: number };
+}
+
 interface OptionChainResponse {
   data: {
     last_price: number;
-    oc: Record<
-      string,
-      {
-        ce?: {
-          last_price: number;
-          volume: number;
-          oi: number;
-          implied_volatility: number;
-          top_bid_price?: number;
-          top_ask_price?: number;
-        };
-        pe?: {
-          last_price: number;
-          volume: number;
-          oi: number;
-          implied_volatility: number;
-          top_bid_price?: number;
-          top_ask_price?: number;
-        };
-      }
-    >;
+    oc: Record<string, { ce?: OptionChainLegResponse; pe?: OptionChainLegResponse }>;
+  };
+}
+
+function mapLeg(leg: OptionChainLegResponse | undefined): DhanOptionLeg | null {
+  if (!leg) return null;
+  const g = leg.greeks;
+  const greeks =
+    g &&
+    typeof g.delta === "number" &&
+    typeof g.gamma === "number" &&
+    typeof g.theta === "number" &&
+    typeof g.vega === "number"
+      ? { delta: g.delta, gamma: g.gamma, theta: g.theta, vega: g.vega }
+      : null;
+  return {
+    ltp: leg.last_price,
+    oi: leg.oi,
+    iv: leg.implied_volatility,
+    volume: leg.volume,
+    bid: leg.top_bid_price ?? null,
+    ask: leg.top_ask_price ?? null,
+    previousOi: leg.previous_oi ?? null,
+    previousVolume: leg.previous_volume ?? null,
+    previousClose: leg.previous_close_price ?? null,
+    topBidQty: leg.top_bid_quantity ?? null,
+    topAskQty: leg.top_ask_quantity ?? null,
+    greeks,
   };
 }
 
@@ -494,6 +605,7 @@ export async function fetchOptionChain(
   expiry: string, // YYYY-MM-DD
 ): Promise<DhanOptionChain> {
   const r = await request<OptionChainResponse>(cfg, {
+    category: "chain",
     path: "/v2/optionchain",
     body: {
       UnderlyingScrip: underlyingSecId,
@@ -505,29 +617,7 @@ export async function fetchOptionChain(
   for (const [strikeStr, legs] of Object.entries(r.data.oc ?? {})) {
     const strike = Number(strikeStr);
     if (!Number.isFinite(strike)) continue;
-    rows.push({
-      strike,
-      call: legs.ce
-        ? {
-            ltp: legs.ce.last_price,
-            oi: legs.ce.oi,
-            iv: legs.ce.implied_volatility,
-            volume: legs.ce.volume,
-            bid: legs.ce.top_bid_price ?? null,
-            ask: legs.ce.top_ask_price ?? null,
-          }
-        : null,
-      put: legs.pe
-        ? {
-            ltp: legs.pe.last_price,
-            oi: legs.pe.oi,
-            iv: legs.pe.implied_volatility,
-            volume: legs.pe.volume,
-            bid: legs.pe.top_bid_price ?? null,
-            ask: legs.pe.top_ask_price ?? null,
-          }
-        : null,
-    });
+    rows.push({ strike, call: mapLeg(legs.ce), put: mapLeg(legs.pe) });
   }
   rows.sort((a, b) => a.strike - b.strike);
   return { underlyingLtp: r.data.last_price, rows };
@@ -543,6 +633,7 @@ export async function fetchExpiryList(
   underlyingSeg: string,
 ): Promise<string[]> {
   const r = await request<ExpiryListResponse>(cfg, {
+    category: "chain",
     path: "/v2/optionchain/expirylist",
     body: {
       UnderlyingScrip: underlyingSecId,
