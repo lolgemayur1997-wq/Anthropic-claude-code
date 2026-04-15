@@ -29,11 +29,19 @@ import type {
   SymbolSnapshot,
 } from "./adapters/types.ts";
 import { blankSnapshot } from "./adapters/types.ts";
+import { validateRawMarketData } from "./validate.ts";
 
 const DEFAULT_MIN_RVOL = 1.5;
 
 export function buildSnapshot(raw: RawMarketData): SymbolSnapshot {
   const base = blankSnapshot(raw.symbol, raw.segment);
+
+  // Schema-validate first. A malformed payload must not reach indicators or
+  // scoring; gate NO_TRADE by returning the blank snapshot with flags only.
+  const issues = validateRawMarketData(raw);
+  if (issues.length > 0) {
+    return { ...base, ...flagsFromRaw(raw) };
+  }
 
   if (!raw.quote || raw.candles5m.length === 0) {
     // Data insufficient — return UNKNOWN snapshot so the runner gates NO-TRADE.

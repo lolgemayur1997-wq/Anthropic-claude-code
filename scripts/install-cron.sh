@@ -12,11 +12,12 @@
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-WRAPPER="$REPO_DIR/scripts/run-intraday-research.sh"
+MORNING_WRAPPER="$REPO_DIR/scripts/run-intraday-research.sh"
+POSTMORTEM_WRAPPER="$REPO_DIR/scripts/run-post-mortem.sh"
 MARKER="# intraday-research@claude-code"
 
 mkdir -p "$REPO_DIR/out"
-chmod +x "$WRAPPER"
+chmod +x "$MORNING_WRAPPER" "$POSTMORTEM_WRAPPER"
 
 if [ "${1:-}" = "--remove" ]; then
   crontab -l 2>/dev/null | grep -v "$MARKER" | crontab -
@@ -29,7 +30,8 @@ crontab -l 2>/dev/null | grep -v "$MARKER" > "$TMP" || true
 
 {
   echo "CRON_TZ=Asia/Kolkata $MARKER"
-  echo "45 9 * * 1-5 bash $WRAPPER $MARKER"
+  echo "45 9  * * 1-5 bash $MORNING_WRAPPER     $MARKER"
+  echo "45 15 * * 1-5 bash $POSTMORTEM_WRAPPER  $MARKER"
 } >> "$TMP"
 
 crontab "$TMP"

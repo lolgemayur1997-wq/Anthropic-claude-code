@@ -11,6 +11,7 @@
     "verify": "bun run orchestrator.ts --stage verify",
     "intraday": "bun run intraday-research.ts",
     "intraday:mock": "bun run intraday-research.ts --adapter mock --dry-run",
+    "post-mortem": "bun run post-mortem.ts",
     "test": "bun test",
     "test:indicators": "bun test indicators",
     "typecheck": "bunx tsc"
