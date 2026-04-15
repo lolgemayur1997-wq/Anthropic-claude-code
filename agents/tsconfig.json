@@ -3,6 +3,8 @@
     "target": "ESNext",
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
@@ -11,5 +13,5 @@
     "jsx": "react-jsx",
     "types": ["bun-types"]
   },
-  "include": ["*.ts"]
+  "include": ["*.ts", "adapters/*.ts"]
 }

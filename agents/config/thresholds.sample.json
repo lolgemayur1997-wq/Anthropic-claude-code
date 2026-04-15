@@ -1,0 +1,25 @@
+{
+  "_comment": "Copy to thresholds.json and edit. Weights sum does not need to be 1; score is normalized to 100.",
+  "weights": {
+    "structure": 0.20,
+    "pattern": 0.15,
+    "indicators": 0.15,
+    "volume": 0.15,
+    "orderBlocks": 0.10,
+    "options": 0.15,
+    "news": 0.05,
+    "eventPenalty": 0.10
+  },
+  "gates": {
+    "vix_ceiling": 22.0,
+    "spread_ceiling_pct": 0.15,
+    "min_rvol_for_breakout": 1.5,
+    "score_threshold": 65,
+    "skip_on_result_within_days": 1
+  },
+  "sizing": {
+    "account_equity_inr": 500000,
+    "account_risk_pct": 0.5,
+    "notional_cap_pct": 10
+  }
+}
