@@ -179,6 +179,17 @@ function collectUnknowns(s: SymbolSnapshot): string[] {
     ["orb_high", s.orbHigh],
     ["orb_low", s.orbLow],
   ];
+  if (s.segment === "options") {
+    // NSE F&O pre-trade fields. Any one null → UNKNOWN → NO_TRADE, per ruleset.
+    required.push(
+      ["in_fno_universe", s.inOfficialFnoUniverse],
+      ["lot_size", s.lotSize],
+      ["dte_days", s.dteDays],
+      ["mwpl_pct", s.mwplPct],
+      ["atm_spread_pct", s.atmSpreadPct],
+      ["atm_oi", s.atmOi],
+    );
+  }
   return required.filter(([, v]) => v === null || v === undefined).map(([k]) => k);
 }
 
@@ -202,13 +213,14 @@ function evaluateGates(
   }
 
   // --- NSE F&O pre-trade gates (rule §2–§7) ---
-  // §2: options require the symbol to be in the official F&O universe
+  // §2: options require the symbol to be CONFIRMED in the official F&O
+  // universe. Unconfirmed (null) treats as NOT in the universe — never assume.
   if (
     s.segment === "options" &&
     t.gates.require_in_fno_universe_for_options &&
-    s.inOfficialFnoUniverse === false
+    s.inOfficialFnoUniverse !== true
   ) {
-    reasons.push("not in NSE F&O universe");
+    reasons.push("F&O universe not confirmed");
   }
   // §3: MWPL ban threshold
   if (s.mwplPct !== null && s.mwplPct >= t.gates.max_mwpl_pct) {

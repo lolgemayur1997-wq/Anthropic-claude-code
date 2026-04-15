@@ -15,7 +15,7 @@ export type Bias = "long" | "short" | null;
 // --- Raw shapes every adapter must assemble before calling buildSnapshot ---
 
 export interface RawCandle {
-  time: number;
+  time: number;   // epoch SECONDS (not ms). snapshot.ts uses this for ORB windowing.
   open: number;
   high: number;
   low: number;

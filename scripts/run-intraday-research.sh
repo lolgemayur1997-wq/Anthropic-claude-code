@@ -67,10 +67,13 @@ bun run agents/intraday-research.ts \
 # --- Build a short summary line ---
 SUMMARY="Intraday research $TODAY — adapter=$ADAPTER"
 if [ -f "$OUT_DIR/intraday-research-$TODAY.json" ]; then
-  PASS=$(grep -c '"verdict": "PASS"' "$OUT_DIR/intraday-research-$TODAY.json" 2>/dev/null || echo 0)
-  GATED=$(grep -c '"verdict": "GATED"' "$OUT_DIR/intraday-research-$TODAY.json" 2>/dev/null || echo 0)
-  NOTR=$(grep -c '"verdict": "NO_TRADE"' "$OUT_DIR/intraday-research-$TODAY.json" 2>/dev/null || echo 0)
-  SUMMARY="$SUMMARY | PASS=$PASS GATED=$GATED NO_TRADE=$NOTR"
+  # grep -c prints a count AND exits non-zero on no-match, which combined
+  # with `|| echo 0` previously produced "0\n0". Use || true to preserve
+  # grep's stdout verbatim, then fall back to 0 only if stdout is empty.
+  PASS=$(grep -c '"verdict": "PASS"' "$OUT_DIR/intraday-research-$TODAY.json" 2>/dev/null || true)
+  GATED=$(grep -c '"verdict": "GATED"' "$OUT_DIR/intraday-research-$TODAY.json" 2>/dev/null || true)
+  NOTR=$(grep -c '"verdict": "NO_TRADE"' "$OUT_DIR/intraday-research-$TODAY.json" 2>/dev/null || true)
+  SUMMARY="$SUMMARY | PASS=${PASS:-0} GATED=${GATED:-0} NO_TRADE=${NOTR:-0}"
 fi
 if [ "$RUN_STATUS" -ne 0 ]; then
   SUMMARY="[ERROR] $SUMMARY (runner exit $RUN_STATUS)"

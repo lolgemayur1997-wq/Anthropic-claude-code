@@ -68,10 +68,18 @@ export function appendEvent(dir: string, ev: Omit<JournalEvent, "ts" | "date">):
 export function readToday(dir: string, date = istDate()): JournalEvent[] {
   const p = journalPath(dir, date);
   if (!existsSync(p)) return [];
-  return readFileSync(p, "utf8")
-    .split("\n")
-    .filter((l) => l.trim().length > 0)
-    .map((l) => JSON.parse(l) as JournalEvent);
+  const out: JournalEvent[] = [];
+  for (const line of readFileSync(p, "utf8").split("\n")) {
+    const trimmed = line.trim();
+    if (trimmed.length === 0) continue;
+    try {
+      out.push(JSON.parse(trimmed) as JournalEvent);
+    } catch {
+      // Malformed line — skip. Circuit breakers stay conservative by using
+      // fewer events rather than crashing the runner.
+    }
+  }
+  return out;
 }
 
 // --- Circuit-breaker queries ---

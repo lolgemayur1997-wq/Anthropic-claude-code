@@ -20,13 +20,20 @@ mkdir -p "$REPO_DIR/out"
 chmod +x "$MORNING_WRAPPER" "$POSTMORTEM_WRAPPER"
 
 if [ "${1:-}" = "--remove" ]; then
-  crontab -l 2>/dev/null | grep -v "$MARKER" | crontab -
+  # Guard both pipeline stages: crontab -l exits 1 with no existing crontab,
+  # which under pipefail would abort the script.
+  if crontab -l >/dev/null 2>&1; then
+    crontab -l | grep -v "$MARKER" | crontab - || true
+  fi
   echo "[install-cron] removed."
   exit 0
 fi
 
 TMP="$(mktemp)"
-crontab -l 2>/dev/null | grep -v "$MARKER" > "$TMP" || true
+# Same guard as above: don't let a missing crontab kill the script.
+if crontab -l >/dev/null 2>&1; then
+  crontab -l | grep -v "$MARKER" > "$TMP" || true
+fi
 
 {
   echo "CRON_TZ=Asia/Kolkata $MARKER"
@@ -44,4 +51,5 @@ echo "Notes:"
 echo "  - Set INTRADAY_ADAPTER (kite/upstox/dhan) in $REPO_DIR/.env.intraday"
 echo "  - Copy agents/config/watchlist.sample.json -> watchlist.json"
 echo "  - Copy agents/config/thresholds.sample.json -> thresholds.json"
-echo "  - Verify: bash $WRAPPER"
+echo "  - Verify morning: bash $MORNING_WRAPPER"
+echo "  - Verify post-mortem: bash $POSTMORTEM_WRAPPER"
