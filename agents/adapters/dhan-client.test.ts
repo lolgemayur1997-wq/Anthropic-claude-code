@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  _resetThrottleForTests,
   findEquity,
   findFrontMonthAtm,
   findIndex,
@@ -7,6 +8,44 @@ import {
   parseInstrumentCsv,
   type DhanInstrument,
 } from "./dhan-client.ts";
+
+describe("throttle — audit regression (race-free FIFO serialisation)", () => {
+  test("concurrent same-category calls fire at least `gap` ms apart", async () => {
+    _resetThrottleForTests();
+    // 4 parallel data-category calls — mirrors Promise.all in snapshotEquity
+    // which fires 4 data requests. Data gap is 200ms.
+    const times: number[] = [];
+    await Promise.all(
+      [0, 1, 2, 3].map(async () => {
+        await (
+          await import("./dhan-client.ts")
+        )._throttleForTests("data");
+        times.push(Date.now());
+      }),
+    );
+    times.sort((a, b) => a - b);
+    // Adjacent pairs must be separated by at least the gap minus a small
+    // timer jitter tolerance (10ms). With the old buggy throttle this
+    // assertion fails immediately — all 4 fire within 1ms.
+    for (let i = 1; i < times.length; i++) {
+      expect(times[i]! - times[i - 1]!).toBeGreaterThanOrEqual(190);
+    }
+  }, 2000);
+
+  test("different categories do not block each other", async () => {
+    _resetThrottleForTests();
+    const { _throttleForTests } = await import("./dhan-client.ts");
+    const t0 = Date.now();
+    await Promise.all([
+      _throttleForTests("data"),
+      _throttleForTests("quote"),
+      _throttleForTests("chain"),
+    ]);
+    // Three categories are independent — all should fire immediately
+    // (first-slot), so total elapsed should be under ~50ms.
+    expect(Date.now() - t0).toBeLessThan(100);
+  });
+});
 
 describe("parseCsvLine", () => {
   test("splits simple CSV", () => {

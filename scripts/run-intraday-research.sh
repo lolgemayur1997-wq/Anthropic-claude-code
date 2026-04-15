@@ -8,7 +8,7 @@
 #   4. Push a Telegram summary + the Markdown report (best-effort).
 #
 # Env contract (see .env.intraday.sample):
-#   INTRADAY_ADAPTER         mock | kite | upstox | dhan   (default: mock)
+#   INTRADAY_ADAPTER         mock | demo | kite | upstox | dhan (default: mock)
 #   INTRADAY_REPO_DIR        absolute repo path             (default: $HOME/Anthropic-claude-code)
 #   INTRADAY_WATCHLIST       path to watchlist.json
 #   INTRADAY_THRESHOLDS      path to thresholds.json

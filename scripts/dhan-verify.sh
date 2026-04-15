@@ -26,11 +26,12 @@ echo "→ Testing Dhan /v2/marketfeed/ltp on INDIA VIX..."
 
 # INDIA VIX has a well-known security ID on Dhan: 21 (IDX_I segment).
 # If your account has Data API enabled this will return a live number.
+# Dhan docs specify integer IDs, NOT string (previous body was ["21"]).
 RESP="$(curl -sS -m 15 \
   -H "access-token: ${DHAN_ACCESS_TOKEN}" \
   -H "client-id: ${DHAN_CLIENT_ID}" \
   -H "Content-Type: application/json" \
-  -d '{"IDX_I":["21"]}' \
+  -d '{"IDX_I":[21]}' \
   https://api.dhan.co/v2/marketfeed/ltp)"
 
 HTTP=$(echo "$RESP" | head -c 400)

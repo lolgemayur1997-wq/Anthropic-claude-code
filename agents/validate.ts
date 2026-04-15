@@ -78,11 +78,33 @@ export function validateRawMarketData(raw: RawMarketData): Issues {
   }
   if (!Array.isArray(raw.candles5m)) issues.push("candles5m not array");
   if (!Array.isArray(raw.candles15m)) issues.push("candles15m not array");
+  if (!Array.isArray(raw.candles1h)) issues.push("candles1h not array");
+  if (!Array.isArray(raw.prevDailyCloses)) issues.push("prevDailyCloses not array");
   for (let i = 0; i < Math.min(raw.candles5m.length, 200); i++) {
     issues.push(...validateCandle(raw.candles5m[i]!, i));
   }
   for (let i = 0; i < Math.min(raw.candles15m.length, 200); i++) {
     issues.push(...validateCandle(raw.candles15m[i]!, i));
+  }
+  if (Array.isArray(raw.candles1h)) {
+    for (let i = 0; i < Math.min(raw.candles1h.length, 200); i++) {
+      issues.push(...validateCandle(raw.candles1h[i]!, i));
+    }
+  }
+  if (Array.isArray(raw.prevDailyCloses)) {
+    for (let i = 0; i < raw.prevDailyCloses.length; i++) {
+      const c = raw.prevDailyCloses[i];
+      if (!isFiniteNum(c) || c <= 0) issues.push(`prevDailyCloses[${i}] invalid`);
+    }
+  }
+  if (!isFiniteOrNull(raw.prevDayHigh)) issues.push("prevDayHigh not number|null");
+  if (!isFiniteOrNull(raw.prevDayLow)) issues.push("prevDayLow not number|null");
+  if (
+    isFiniteNum(raw.prevDayHigh) &&
+    isFiniteNum(raw.prevDayLow) &&
+    raw.prevDayHigh < raw.prevDayLow
+  ) {
+    issues.push("prevDayHigh < prevDayLow");
   }
   if (raw.quote !== null) issues.push(...validateQuote(raw.quote));
   if (raw.avgDailyVolume !== null && !isNonNegNum(raw.avgDailyVolume)) {

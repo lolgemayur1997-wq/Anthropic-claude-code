@@ -48,7 +48,7 @@ echo "[install-cron] installed. Current entries:"
 crontab -l | grep "$MARKER" || true
 echo
 echo "Notes:"
-echo "  - Set INTRADAY_ADAPTER (kite/upstox/dhan) in $REPO_DIR/.env.intraday"
+echo "  - Set INTRADAY_ADAPTER (demo/kite/upstox/dhan) in $REPO_DIR/.env.intraday"
 echo "  - Copy agents/config/watchlist.sample.json -> watchlist.json"
 echo "  - Copy agents/config/thresholds.sample.json -> thresholds.json"
 echo "  - Verify morning: bash $MORNING_WRAPPER"

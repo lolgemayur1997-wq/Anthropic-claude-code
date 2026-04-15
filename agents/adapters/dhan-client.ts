@@ -33,7 +33,7 @@ const RATE_GAP_MS = {
   data: 200,   // historical charts + generic data APIs — 5 req/sec
 } as const;
 
-type RateCategory = keyof typeof RATE_GAP_MS;
+export type RateCategory = keyof typeof RATE_GAP_MS;
 
 // --- Config ---
 
@@ -56,14 +56,36 @@ export function loadConfig(): DhanConfig {
 }
 
 // --- Request helper ---
+//
+// IMPORTANT: the throttle reserves its slot BEFORE awaiting. Otherwise N
+// concurrent same-category calls (e.g. the Promise.all in snapshotEquity
+// fires 4 data-category requests at once) would all read a stale
+// `nextSlotAt`, all compute the same tiny wait, and all hit the API
+// effectively simultaneously — violating Dhan's rate limits and triggering
+// 429s. Optimistic reservation serialises them into a FIFO.
 
-const lastByCategory: Record<RateCategory, number> = { quote: 0, chain: 0, data: 0 };
+const nextSlotAt: Record<RateCategory, number> = { quote: 0, chain: 0, data: 0 };
+
+/** Test-only reset for the throttle state. Not used in production. */
+export function _resetThrottleForTests(): void {
+  nextSlotAt.quote = 0;
+  nextSlotAt.chain = 0;
+  nextSlotAt.data = 0;
+}
+
+/** Test-only exposure of the throttle. Not used in production. */
+export function _throttleForTests(category: RateCategory): Promise<void> {
+  return throttle(category);
+}
 
 async function throttle(category: RateCategory): Promise<void> {
   const gap = RATE_GAP_MS[category];
-  const wait = gap - (Date.now() - lastByCategory[category]);
+  const now = Date.now();
+  const fireAt = Math.max(now, nextSlotAt[category]);
+  // Reserve the next slot for whoever comes in after me.
+  nextSlotAt[category] = fireAt + gap;
+  const wait = fireAt - now;
   if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-  lastByCategory[category] = Date.now();
 }
 
 interface RequestOptions {
@@ -75,6 +97,12 @@ interface RequestOptions {
   retries?: number;
 }
 
+/** Marker class so auth-error throws from inside the request loop can be
+ *  distinguished from network errors (which retry) by the outer catch. */
+class DhanTerminalError extends Error {
+  readonly isTerminal = true;
+}
+
 async function request<T>(cfg: DhanConfig, opts: RequestOptions): Promise<T> {
   const { category, method = "POST", path, body, timeoutMs = 15000, retries = 2 } = opts;
   const url = `${BASE_URL}${path}`;
@@ -84,8 +112,10 @@ async function request<T>(cfg: DhanConfig, opts: RequestOptions): Promise<T> {
     await throttle(category);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    let res: Response;
     try {
-      const res = await fetch(url, {
+      res = await fetch(url, {
         method,
         headers: {
           "access-token": cfg.accessToken,
@@ -96,31 +126,32 @@ async function request<T>(cfg: DhanConfig, opts: RequestOptions): Promise<T> {
         body: body ? JSON.stringify(body) : undefined,
         signal: controller.signal,
       });
+    } catch (networkErr) {
+      // Transport / abort / DNS error — retryable.
       clearTimeout(timer);
+      lastError = networkErr;
+      if (attempt < retries) await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt)));
+      continue;
+    }
+    clearTimeout(timer);
 
-      if (res.ok) return (await res.json()) as T;
+    if (res.ok) return (await res.json()) as T;
 
-      const text = await res.text();
-      // Auth errors don't retry — token is bad, token will stay bad.
-      if (res.status === 401 || res.status === 403) {
-        throw new Error(
-          `Dhan auth failed (${res.status}): ${text}. Regenerate access token at web.dhan.co.`,
-        );
-      }
-      // 404 doesn't retry either — wrong endpoint or wrong symbol.
-      if (res.status === 404) throw new Error(`Dhan 404 at ${path}: ${text}`);
+    // HTTP-error handling: terminal statuses never retry.
+    const text = await res.text();
+    if (res.status === 401 || res.status === 403) {
+      throw new DhanTerminalError(
+        `Dhan auth failed (${res.status}): ${text}. Regenerate access token at web.dhan.co.`,
+      );
+    }
+    if (res.status === 404) {
+      throw new DhanTerminalError(`Dhan 404 at ${path}: ${text}`);
+    }
 
-      // 429 (rate limit) or 5xx — backoff + retry.
-      lastError = new Error(`Dhan ${res.status} at ${path}: ${text}`);
-      if (attempt < retries) {
-        await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt)));
-      }
-    } catch (e) {
-      clearTimeout(timer);
-      lastError = e;
-      if (attempt < retries) {
-        await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt)));
-      }
+    // 429 / 5xx — retryable with exponential backoff.
+    lastError = new Error(`Dhan ${res.status} at ${path}: ${text}`);
+    if (attempt < retries) {
+      await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt)));
     }
   }
   throw lastError;

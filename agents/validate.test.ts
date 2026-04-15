@@ -117,4 +117,29 @@ describe("validateRawMarketData", () => {
     const issues = validateRawMarketData(r);
     expect(issues.some((i) => i.includes("mwplPct"))).toBeTrue();
   });
+
+  test("catches invalid candles1h (audit regression)", () => {
+    const r = emptyRawMarketData("X", "equity");
+    r.quote = { ltp: 100, prevClose: 99, dayHigh: 101, dayLow: 99, bid: null, ask: null };
+    r.candles1h = [
+      { time: 0, open: 100, high: 99, low: 101, close: 100, volume: 1000 }, // high<low
+    ];
+    const issues = validateRawMarketData(r);
+    expect(issues.some((i) => i.includes("high<low"))).toBeTrue();
+  });
+
+  test("catches invalid prevDailyCloses (audit regression)", () => {
+    const r = emptyRawMarketData("X", "equity");
+    r.prevDailyCloses = [100, NaN, 102];
+    const issues = validateRawMarketData(r);
+    expect(issues.some((i) => i.includes("prevDailyCloses[1]"))).toBeTrue();
+  });
+
+  test("catches prevDayHigh < prevDayLow (audit regression)", () => {
+    const r = emptyRawMarketData("X", "equity");
+    r.prevDayHigh = 95;
+    r.prevDayLow = 100;
+    const issues = validateRawMarketData(r);
+    expect(issues.some((i) => i.includes("prevDayHigh < prevDayLow"))).toBeTrue();
+  });
 });
