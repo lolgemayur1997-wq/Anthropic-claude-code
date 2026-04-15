@@ -162,7 +162,9 @@ function trendFromEmas(candles: Candle[]): Direction {
   const slow = ema(closes, 20);
   if (fast === null || slow === null) return "neutral";
   const diff = (fast - slow) / slow;
-  if (diff > 0.001) return "up";
-  if (diff < -0.001) return "down";
+  // 3 bps (0.03%) between fast and slow EMA — meaningful on intraday 5m bars.
+  // For daily-scale series the signal will be far stronger.
+  if (diff > 0.0003) return "up";
+  if (diff < -0.0003) return "down";
   return "neutral";
 }

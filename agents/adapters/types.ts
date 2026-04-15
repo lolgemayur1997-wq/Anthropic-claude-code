@@ -6,7 +6,7 @@
  * fabricate data.
  */
 
-export type AdapterName = "mock" | "kite" | "upstox" | "dhan";
+export type AdapterName = "mock" | "demo" | "kite" | "upstox" | "dhan";
 
 export type Segment = "equity" | "futures" | "options";
 

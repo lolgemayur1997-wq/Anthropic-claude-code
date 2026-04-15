@@ -4,6 +4,8 @@ export async function loadAdapter(name: AdapterName): Promise<Adapter> {
   switch (name) {
     case "mock":
       return (await import("./mock.ts")).default;
+    case "demo":
+      return (await import("./demo.ts")).default;
     case "kite":
       return (await import("./kite.ts")).default;
     case "upstox":

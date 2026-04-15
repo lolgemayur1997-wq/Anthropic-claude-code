@@ -86,9 +86,12 @@ export function buildSnapshot(raw: RawMarketData): SymbolSnapshot {
     trend1hHigherHighs: null,
   });
 
+  // An ORB breakout / breakdown IS a named pattern — don't pass null here.
+  const orbBreakUp = orbHigh !== null && raw.quote.ltp > orbHigh;
+  const orbBreakDown = orbLow !== null && raw.quote.ltp < orbLow;
   const patternScore = scorePattern({
-    named: null,
-    breakoutConfirmed: orbHigh !== null ? raw.quote.ltp > orbHigh : null,
+    named: orbBreakUp ? "ORB-breakout-up" : orbBreakDown ? "ORB-breakdown" : null,
+    breakoutConfirmed: orbBreakUp || orbBreakDown,
     failedRecently: null,
   });
 
