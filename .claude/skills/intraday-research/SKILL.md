@@ -31,6 +31,7 @@ European + physical settlement, auto-exercise, etc.). The `gates` in
 
 Operator-invokable checks (all defined as slash commands):
 
+Pre-trade (NSE F&O rules):
 - `/check-fno-universe` — universe eligibility (rule §2)
 - `/check-contract-specs` — lot, expiry, DTE, style, settlement (rule §1)
 - `/check-ban-surveillance` — MWPL %, Extra ELM, ASM (rule §3)
@@ -39,6 +40,25 @@ Operator-invokable checks (all defined as slash commands):
 - `/check-iv-rv` — IV percentile vs 20/60d realized vol; buyer vs seller (§6)
 - `/check-margin` — SPAN + ELM + 1σ/2σ stress (§7)
 - `/pre-trade` — runs the full sequence as a single gate (rule §9 workflow)
+
+Structure + strike (analytics):
+- `/pick-structure` — best structure for IV regime × bias × DTE × margin
+- `/pick-strike` — delta-targeted strike picker (Black-Scholes); supports
+  vertical-spread two-leg selection
+
+Discipline (tilt protection + learning loop):
+- `/journal` — append-only event log; powers circuit breakers
+- `/post-mortem` — EOD review: forecast vs. outcome, gate calibration, tuning
+
+## Hard gates the runner enforces automatically (no slash command needed)
+
+- NSE F&O rules §1–§7 (see above)
+- **Daily loss cap** — halt for rest of day once breached
+- **Max trades per day** — hard cap (default 3)
+- **Cooldown after stop-out** — NO_TRADE for N minutes after a stopped trade
+- **Sector/correlation cap** — max N same-direction positions in the same sector
+- **Charges bake-in** — targets are expressed as *net* R-multiples (after
+  STT + exchange + SEBI + stamp + brokerage + GST)
 
 ## When to invoke
 

@@ -24,7 +24,12 @@
     "gate_extra_elm_for_short": true,
     "gate_asm": true,
     "require_in_fno_universe_for_options": true,
-    "max_margin_utilisation_pct": 25
+    "max_margin_utilisation_pct": 25,
+    "daily_loss_cap_pct": 2.0,
+    "max_trades_per_day": 3,
+    "cooldown_after_stop_mins": 30,
+    "max_same_sector_same_dir_positions": 2,
+    "bake_charges_into_targets": true
   },
   "sizing": {
     "account_equity_inr": 500000,

@@ -23,6 +23,14 @@ import { join } from "node:path";
 
 import type { Adapter, AdapterName, SymbolSnapshot } from "./adapters/types.ts";
 import { loadAdapter } from "./adapters/index.ts";
+import { roundTripCharges } from "./charges.ts";
+import {
+  appendEvent,
+  circuitBreakerGateReasons,
+  circuitBreakerState,
+  readToday,
+} from "./journal.ts";
+import { correlationGateReason, type OpenPosition } from "./correlation.ts";
 
 // --- Types ---
 
@@ -48,6 +56,12 @@ interface Thresholds {
     gate_asm: boolean;                    // §3 (default true)
     require_in_fno_universe_for_options: boolean; // §2 (default true)
     max_margin_utilisation_pct: number;   // §7 (default 25)
+    // Tilt protection / concentration (see agents/journal.ts, agents/correlation.ts)
+    daily_loss_cap_pct: number;           // halt for the day once breached
+    max_trades_per_day: number;
+    cooldown_after_stop_mins: number;     // NO_TRADE window after a stop-out
+    max_same_sector_same_dir_positions: number; // correlation cap
+    bake_charges_into_targets: boolean;   // subtract round-trip charges from gross targets
   };
   sizing: {
     account_equity_inr: number;
@@ -88,6 +102,10 @@ interface TradePlan {
   riskInr: number;
   notionalInr: number;
   invalidation: number;
+  // Charges-aware economics (rule: gross R-multiples are fiction)
+  roundTripChargesInr: number | null;
+  netT1RMultiple: number | null;
+  netT2RMultiple: number | null;
 }
 
 // --- CLI ---
@@ -265,6 +283,32 @@ function buildPlan(s: SymbolSnapshot, t: Thresholds): TradePlan | null {
   const notional = qty * entry;
   const notionalCap = t.sizing.account_equity_inr * (t.sizing.notional_cap_pct / 100);
   const cappedQty = notional > notionalCap ? Math.floor(notionalCap / entry) : qty;
+
+  // Charges-aware: compute round-trip charges at T1 exit and derive net R.
+  let roundTripChargesInr: number | null = null;
+  let netT1R: number | null = null;
+  let netT2R: number | null = null;
+  if (t.gates.bake_charges_into_targets && cappedQty > 0 && s.segment !== "equity") {
+    const chargesT1 = roundTripCharges(
+      s.segment === "futures" ? "futures" : "options",
+      cappedQty,
+      entry,
+      t1,
+    );
+    roundTripChargesInr = Math.round(chargesT1.total_inr);
+    const riskInr = cappedQty * stopDistance;
+    const grossT1 = (t1 - entry) * (long ? cappedQty : -cappedQty);
+    const grossT2 = (t2 - entry) * (long ? cappedQty : -cappedQty);
+    netT1R = riskInr === 0 ? 0 : (grossT1 - chargesT1.total_inr) / riskInr;
+    const chargesT2 = roundTripCharges(
+      s.segment === "futures" ? "futures" : "options",
+      cappedQty,
+      entry,
+      t2,
+    );
+    netT2R = riskInr === 0 ? 0 : (grossT2 - chargesT2.total_inr) / riskInr;
+  }
+
   return {
     bias: s.bias,
     entryTrigger: `5m close ${long ? ">" : "<"} ${round(entry)}`,
@@ -277,6 +321,9 @@ function buildPlan(s: SymbolSnapshot, t: Thresholds): TradePlan | null {
     riskInr: Math.round(cappedQty * stopDistance),
     notionalInr: Math.round(cappedQty * entry),
     invalidation: round(stop),
+    roundTripChargesInr,
+    netT1RMultiple: netT1R === null ? null : round(netT1R),
+    netT2RMultiple: netT2R === null ? null : round(netT2R),
   };
 }
 
@@ -284,9 +331,25 @@ function round(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-function checklistForSymbol(s: SymbolSnapshot, t: Thresholds, vix: number | null): ChecklistResult {
+function checklistForSymbol(
+  s: SymbolSnapshot,
+  t: Thresholds,
+  vix: number | null,
+  sessionGates: string[],
+  openPositions: OpenPosition[],
+): ChecklistResult {
   const unknowns = collectUnknowns(s);
-  const gates = evaluateGates(s, t, vix);
+  const perSymbolGates = evaluateGates(s, t, vix);
+  // Correlation gate is per-candidate but depends on concurrent book.
+  if (s.bias !== null) {
+    const corrReason = correlationGateReason(
+      { symbol: s.symbol, bias: s.bias },
+      openPositions,
+      t.gates.max_same_sector_same_dir_positions,
+    );
+    if (corrReason) perSymbolGates.push(corrReason);
+  }
+  const gates = [...sessionGates, ...perSymbolGates];
   const score = scoreSymbol(s, t);
   const gated = gates.length > 0;
   const hasAllData = unknowns.length === 0;
@@ -319,6 +382,7 @@ function renderReport(
   vix: number | null,
   results: ChecklistResult[],
   thresholdsHash: string,
+  cbState: ReturnType<typeof circuitBreakerState>,
 ): string {
   const parts: string[] = [];
   parts.push(`# Intraday Research — ${date} (${window} window, IST)`);
@@ -328,6 +392,12 @@ function renderReport(
   parts.push("## Market context");
   parts.push(`- Adapter: \`${adapter}\``);
   parts.push(`- India VIX: ${vix ?? "UNKNOWN"}`);
+  parts.push("");
+  parts.push("## Tilt protection (today)");
+  parts.push(`- Daily P&L so far: ₹${Math.round(cbState.dailyPnlInr)}`);
+  parts.push(`- Trades taken: ${cbState.tradesTaken}`);
+  parts.push(`- Cooldown active: ${cbState.cooldownActive ? `yes (${cbState.cooldownRemainingMins.toFixed(1)}m)` : "no"}`);
+  parts.push(`- Daily loss cap breached: ${cbState.dailyLossCapBreached ? "**YES (session halt)**" : "no"}`);
   parts.push("");
   parts.push("## Watchlist results");
   parts.push("");
@@ -374,12 +444,13 @@ function renderPlan(r: ChecklistResult): string {
     `  level: ${p.stopLevel}`,
     `  distance_atr: ${p.stopAtrMultiple}`,
     `targets:`,
-    `  t1: { level: ${p.t1.level}, r_multiple: ${p.t1.r} }`,
-    `  t2: { level: ${p.t2.level}, r_multiple: ${p.t2.r} }`,
+    `  t1: { level: ${p.t1.level}, r_multiple_gross: ${p.t1.r}, r_multiple_net: ${p.netT1RMultiple ?? "n/a"} }`,
+    `  t2: { level: ${p.t2.level}, r_multiple_gross: ${p.t2.r}, r_multiple_net: ${p.netT2RMultiple ?? "n/a"} }`,
     `position_sizing:`,
     `  qty: ${p.qty}`,
     `  risk_inr: ${p.riskInr}`,
     `  notional_inr: ${p.notionalInr}`,
+    `  round_trip_charges_inr: ${p.roundTripChargesInr ?? "n/a"}`,
     "```",
     "",
   ].join("\n");
@@ -425,8 +496,57 @@ async function main(): Promise<void> {
     }
   }
 
-  const results = snapshots.map((s) => checklistForSymbol(s, thresholds, vix));
-  const report = renderReport(dateStr, window, args.adapter, vix, results, thresholdsHash);
+  // Session-wide circuit breakers from today's journal (tilt protection).
+  const journalDir = join(args.outDir, "journal");
+  const todaysEvents = readToday(journalDir);
+  const cbState = circuitBreakerState(todaysEvents, {
+    accountEquityInr: thresholds.sizing.account_equity_inr,
+    dailyLossCapPct: thresholds.gates.daily_loss_cap_pct,
+    maxTradesPerDay: thresholds.gates.max_trades_per_day,
+    cooldownAfterStopMins: thresholds.gates.cooldown_after_stop_mins,
+  });
+  const sessionGates = circuitBreakerGateReasons(cbState);
+  // Open positions (marked as TRADE_TAKEN but not closed) feed correlation cap.
+  const openPositions: OpenPosition[] = openFromJournal(todaysEvents);
+
+  const results = snapshots.map((s) =>
+    checklistForSymbol(s, thresholds, vix, sessionGates, openPositions),
+  );
+
+  // Journal every PLAN_EMITTED / GATE_BLOCKED for audit + edge calibration.
+  if (!args.dryRun) {
+    for (const r of results) {
+      if (r.verdict === "PASS" && r.plan) {
+        appendEvent(journalDir, {
+          kind: "PLAN_EMITTED",
+          symbol: r.symbol,
+          segment: r.segment,
+          bias: r.plan.bias,
+          entry: r.snapshot.ltp ?? undefined,
+          stop: r.plan.stopLevel,
+          target: r.plan.t1.level,
+          qty: r.plan.qty,
+        });
+      } else if (r.verdict === "GATED") {
+        appendEvent(journalDir, {
+          kind: "GATE_BLOCKED",
+          symbol: r.symbol,
+          segment: r.segment,
+          gateReasons: r.gateReasons,
+        });
+      }
+    }
+  }
+
+  const report = renderReport(
+    dateStr,
+    window,
+    args.adapter,
+    vix,
+    results,
+    thresholdsHash,
+    cbState,
+  );
 
   if (args.dryRun) {
     console.log(report);
@@ -439,7 +559,15 @@ async function main(): Promise<void> {
   await writeFile(
     jsonPath,
     JSON.stringify(
-      { date: dateStr, window, adapter: args.adapter, vix, thresholdsHash, results },
+      {
+        date: dateStr,
+        window,
+        adapter: args.adapter,
+        vix,
+        thresholdsHash,
+        circuitBreaker: cbState,
+        results,
+      },
       null,
       2,
     ),
@@ -451,6 +579,20 @@ async function main(): Promise<void> {
   console.log(`[intraday-research] ${summary}`);
   console.log(`[intraday-research] ${mdPath}`);
   console.log(`[intraday-research] ${jsonPath}`);
+}
+
+function openFromJournal(events: ReturnType<typeof readToday>): OpenPosition[] {
+  // A position is "open" if it has TRADE_TAKEN today without a matching
+  // TRADE_CLOSED / STOP_HIT for the same symbol.
+  const open = new Map<string, OpenPosition>();
+  for (const e of events) {
+    if (e.kind === "TRADE_TAKEN" && e.bias) {
+      open.set(e.symbol, { symbol: e.symbol, bias: e.bias });
+    } else if (e.kind === "TRADE_CLOSED" || e.kind === "STOP_HIT") {
+      open.delete(e.symbol);
+    }
+  }
+  return [...open.values()];
 }
 
 main().catch((e) => {

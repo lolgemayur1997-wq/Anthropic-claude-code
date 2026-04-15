@@ -33,10 +33,28 @@ research note for the operator's Indian-market watchlist using the
    at the ATM strike (§5), IV vs RV regime fit (§6), and margin stress (§7).
    Any failure ⇒ NO-TRADE. Invoke the individual `/check-*` commands or the
    combined `/pre-trade` command when a human-readable breakdown is required.
-7. **Explain the invalidation.** Every trade plan must state the exact price
-   level that disproves the thesis.
-8. **Keep the report auditable.** Include the raw adapter timestamps and the
-   config hash of `thresholds.json` in the report footer.
+7. **Enforce tilt protection.** Before emitting any PASS, read today's
+   journal (`out/journal/intraday-<date>.jsonl`). Apply circuit breakers from
+   `agents/journal.ts::circuitBreakerState`:
+   - Daily-loss cap breached → session halt (NO_TRADE for all symbols).
+   - Max trades per day reached → NO_TRADE.
+   - Cooldown active after a STOP_HIT → NO_TRADE until the window clears.
+   Record every PLAN_EMITTED and GATE_BLOCKED back to the journal for audit
+   and edge calibration via `/post-mortem`.
+8. **Charges are not optional.** Every options/futures plan must carry the
+   round-trip `roundTripChargesInr` and *net* R-multiples from
+   `agents/charges.ts`. Gross R-multiples alone are not acceptable.
+9. **Pick structure and strike deliberately.** For qualifying options
+   candidates invoke `pickStructure()` (IV regime × bias × DTE × margin)
+   and `pickStrikeByDelta()` (Black-Scholes delta-target) before emitting the
+   plan. Never default to "ATM ± 2" without a computed delta check.
+10. **Correlation cap.** Refuse to emit a plan that would push the sector
+    same-direction concurrent count past the configured cap (default 2).
+11. **Explain the invalidation.** Every trade plan must state the exact price
+    level that disproves the thesis.
+12. **Keep the report auditable.** Include the raw adapter timestamps, the
+    config hash of `thresholds.json`, and the circuit-breaker snapshot in
+    the report footer.
 
 ## Workflow
 
