@@ -2,10 +2,11 @@
 
 Agents that collaborate on the Indian intraday / F&O research pipeline.
 
-| Role                    | Agent               | When invoked                                                    |
-|-------------------------|---------------------|-----------------------------------------------------------------|
-| Rule-based scanner      | `intraday-researcher` | 09:45 IST cron, or manual `/intraday-research`              |
-| Discretionary reviewer  | `senior-trader`     | `/review-trade` after the morning report                       |
+| Role                    | Agent                 | When invoked                                              |
+|-------------------------|-----------------------|-----------------------------------------------------------|
+| Rule-based scanner      | `intraday-researcher` | 09:45 IST cron, or manual `/intraday-research`            |
+| Discretionary reviewer  | `senior-trader`       | `/review-trade` after the morning report                  |
+| Position sizing / risk  | `risk-manager`        | `/size-check` after the senior review                     |
 
 ## Pipeline flow
 
@@ -35,6 +36,18 @@ Agents that collaborate on the Indian intraday / F&O research pipeline.
 │  - Cannot UPGRADE gated / UNKNOWN plans                     │
 └─────────────────────────────────────────────────────────────┘
     │
+    ▼  (operator runs /size-check, or invokes Agent tool)
+┌─────────────────────────────────────────────────────────────┐
+│ risk-manager (sizing + drawdown)                            │
+│  - Reads APPROVE/REVISE plans + today's journal + context   │
+│  - Applies multiplicative haircuts:                         │
+│    confluence / regime / circuit-breaker proximity /        │
+│    sector concentration / charges sanity / notional floor   │
+│  - Emits out/risk-review-<date>.md with final_qty per plan  │
+│  - Can REDUCE qty or veto to 0; cannot INCREASE beyond      │
+│    the runner's mechanical qty                              │
+└─────────────────────────────────────────────────────────────┘
+    │
     ▼
 operator decides → trade + /journal log, OR NO_TRADE + /journal log
     │
@@ -54,15 +67,17 @@ operator decides → trade + /journal log, OR NO_TRADE + /journal log
 
 These are the invariants. Neither agent can relax them.
 
-| Action                                      | intraday-researcher | senior-trader | operator |
-|---------------------------------------------|:-------------------:|:-------------:|:--------:|
-| Fetch live market data                      | ✓ (via adapter)     | —             | —        |
-| Apply NSE F&O rule gates                    | ✓                   | —             | —        |
-| Emit a PASS plan                            | ✓                   | —             | —        |
-| Downgrade PASS → NO_TRADE (with reason)     | —                   | ✓             | ✓        |
-| Upgrade GATED / UNKNOWN → PASS              | —                   | —             | —        |
-| Place an order                              | —                   | —             | ✓        |
-| Log to journal                              | ✓ (PLAN_EMITTED / GATE_BLOCKED) | —   | ✓ (TRADE_TAKEN / TRADE_CLOSED / STOP_HIT) |
+| Action                                      | intraday-researcher | senior-trader | risk-manager | operator |
+|---------------------------------------------|:-------------------:|:-------------:|:------------:|:--------:|
+| Fetch live market data                      | ✓ (via adapter)     | —             | —            | —        |
+| Apply NSE F&O rule gates                    | ✓                   | —             | —            | —        |
+| Emit a PASS plan                            | ✓                   | —             | —            | —        |
+| Downgrade PASS → NO_TRADE (with reason)     | —                   | ✓             | ✓ (via veto) | ✓        |
+| Upgrade GATED / UNKNOWN → PASS              | —                   | —             | —            | —        |
+| Reduce qty below mechanical                 | —                   | —             | ✓            | ✓        |
+| Increase qty above mechanical               | —                   | —             | —            | —        |
+| Place an order                              | —                   | —             | —            | ✓        |
+| Log to journal                              | ✓ (PLAN_EMITTED / GATE_BLOCKED) | — | —      | ✓ (TRADE_TAKEN / TRADE_CLOSED / STOP_HIT) |
 
 ## Non-goals (both agents)
 
@@ -81,8 +96,10 @@ bun run agents/intraday-research.ts --adapter <kite|upstox|dhan>
 
 # Senior review — after the morning scan
 # In Claude Code:
-/review-trade                     # review today's full batch
+/review-trade                     # stage 2: senior-trader discretionary review
 /review-trade RELIANCE            # review one symbol's plan
+/size-check                       # stage 3: risk-manager final sizing
+/size-check RELIANCE              # one symbol
 
 # End-of-day review — runs automatically at 15:45 IST
 # or manually:

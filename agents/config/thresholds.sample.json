@@ -29,7 +29,9 @@
     "max_trades_per_day": 3,
     "cooldown_after_stop_mins": 30,
     "max_same_sector_same_dir_positions": 2,
-    "bake_charges_into_targets": true
+    "bake_charges_into_targets": true,
+    "veto_on_choppy_day": true,
+    "min_confluence_score": 0.5
   },
   "sizing": {
     "account_equity_inr": 500000,

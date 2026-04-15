@@ -17,20 +17,30 @@
  *   - GST: 18% on (brokerage + txn + SEBI)
  */
 
-export type Segment = "futures" | "options";
+export type Segment = "equity" | "futures" | "options";
 export type Side = "buy" | "sell";
 
 export interface ChargeSchedule {
-  // Tax on SELL side only. Futures: 0.02% of traded value. Options: 0.1% of
-  // premium (turnover) on sell; 0.125% of intrinsic on exercise.
-  stt: { futures_sell_pct: number; options_sell_premium_pct: number; options_exercise_intrinsic_pct: number };
+  // STT rates per segment. Equity intraday: 0.025% on SELL. Equity delivery:
+  // 0.1% both sides (not relevant for intraday runner). Futures: 0.02% sell.
+  // Options: 0.1% of premium on sell, 0.125% of intrinsic on exercise.
+  stt: {
+    equity_intraday_sell_pct: number;
+    futures_sell_pct: number;
+    options_sell_premium_pct: number;
+    options_exercise_intrinsic_pct: number;
+  };
   // Exchange transaction charge (NSE). Rates differ by segment.
-  // Values are % of turnover. Futures ~0.0019%, Options ~0.05% of premium.
-  exchange_txn: { futures_pct: number; options_premium_pct: number };
-  // SEBI turnover fee (% of turnover, both sides).
+  // Equity: ~0.00297% of turnover. Futures: ~0.0019%. Options: ~0.05% of premium.
+  exchange_txn: { equity_pct: number; futures_pct: number; options_premium_pct: number };
+  // SEBI turnover fee (% of turnover, both sides, same for all segments).
   sebi_turnover_pct: number;
-  // Stamp duty (BUY side only). Futures 0.002%, Options 0.003%.
-  stamp_duty: { futures_buy_pct: number; options_buy_premium_pct: number };
+  // Stamp duty (BUY side only). Equity intraday: 0.003%. Futures: 0.002%. Options: 0.003%.
+  stamp_duty: {
+    equity_buy_pct: number;
+    futures_buy_pct: number;
+    options_buy_premium_pct: number;
+  };
   // Brokerage per order (flat) OR % of turnover (max-cap aware broker).
   brokerage: { flat_inr: number; pct_of_turnover: number; cap_inr: number };
   // GST: 18% of (brokerage + exchange_txn + sebi).
@@ -39,16 +49,19 @@ export interface ChargeSchedule {
 
 export const DEFAULT_SCHEDULE: ChargeSchedule = {
   stt: {
+    equity_intraday_sell_pct: 0.025,
     futures_sell_pct: 0.02,
     options_sell_premium_pct: 0.1,
     options_exercise_intrinsic_pct: 0.125,
   },
   exchange_txn: {
+    equity_pct: 0.00297,
     futures_pct: 0.0019,
     options_premium_pct: 0.05,
   },
   sebi_turnover_pct: 0.0001,
   stamp_duty: {
+    equity_buy_pct: 0.003,
     futures_buy_pct: 0.002,
     options_buy_premium_pct: 0.003,
   },
@@ -101,23 +114,39 @@ export function chargesForLeg(leg: TradeLeg, s: ChargeSchedule = DEFAULT_SCHEDUL
 function computeStt(leg: TradeLeg, s: ChargeSchedule): number {
   if (leg.side !== "sell") return 0;
   const turnover = leg.qty * leg.price;
-  if (leg.segment === "futures") return turnover * (s.stt.futures_sell_pct / 100);
-  return turnover * (s.stt.options_sell_premium_pct / 100);
+  switch (leg.segment) {
+    case "equity":
+      return turnover * (s.stt.equity_intraday_sell_pct / 100);
+    case "futures":
+      return turnover * (s.stt.futures_sell_pct / 100);
+    case "options":
+      return turnover * (s.stt.options_sell_premium_pct / 100);
+  }
 }
 
 function computeExchangeTxn(leg: TradeLeg, s: ChargeSchedule): number {
   const turnover = leg.qty * leg.price;
-  return leg.segment === "futures"
-    ? turnover * (s.exchange_txn.futures_pct / 100)
-    : turnover * (s.exchange_txn.options_premium_pct / 100);
+  switch (leg.segment) {
+    case "equity":
+      return turnover * (s.exchange_txn.equity_pct / 100);
+    case "futures":
+      return turnover * (s.exchange_txn.futures_pct / 100);
+    case "options":
+      return turnover * (s.exchange_txn.options_premium_pct / 100);
+  }
 }
 
 function computeStampDuty(leg: TradeLeg, s: ChargeSchedule): number {
   if (leg.side !== "buy") return 0;
   const turnover = leg.qty * leg.price;
-  return leg.segment === "futures"
-    ? turnover * (s.stamp_duty.futures_buy_pct / 100)
-    : turnover * (s.stamp_duty.options_buy_premium_pct / 100);
+  switch (leg.segment) {
+    case "equity":
+      return turnover * (s.stamp_duty.equity_buy_pct / 100);
+    case "futures":
+      return turnover * (s.stamp_duty.futures_buy_pct / 100);
+    case "options":
+      return turnover * (s.stamp_duty.options_buy_premium_pct / 100);
+  }
 }
 
 /** Round-trip charges: entry + exit. Returns total ₹ and total as % of

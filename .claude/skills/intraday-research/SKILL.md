@@ -69,22 +69,28 @@ Discipline (tilt protection + learning loop):
 - After the morning scan: run `/review-trade` to get the senior-trader's
   discretionary review of each `PASS` plan.
 
-## Two-stage review (team)
+## Three-stage review (team)
 
 ```
-Stage 1 — intraday-researcher    (rule-based)
-  live data → indicators → scoring → NSE F&O gates → circuit breakers → plan
+Stage 1 — intraday-researcher    (rule-based, 09:45 IST cron)
+  live data → indicators → scoring → NSE F&O gates → circuit breakers
+  → day context (regime, gap, multi-TF confluence) → mechanical plan
 
 Stage 2 — senior-trader          (discretionary, /review-trade)
   context · pattern quality · trap risk · flow-vs-price · premium sanity ·
   structure · size · invalidation clarity · regret test
   ⇒ APPROVE / REVISE / REJECT per plan
+
+Stage 3 — risk-manager           (sizing / drawdown, /size-check)
+  confluence haircut · regime haircut · circuit-breaker proximity ·
+  sector concentration · charges sanity · notional floor
+  ⇒ final_qty per approved plan (often < mechanical qty)
 ```
 
-The senior-trader can DOWNGRADE a PASS to NO_TRADE with reason; it cannot
-UPGRADE a gated or UNKNOWN plan — rule gates encode exchange reality and
-stay the floor. See `.claude/agents/README.md` for the full roster and
-authority matrix.
+Each stage can only ratchet down — DOWNGRADE verdicts or REDUCE size.
+None can UPGRADE. Rule gates (exchange reality: ban list, Extra-ELM,
+corp actions, margin) remain the authoritative floor. See
+`.claude/agents/README.md` for the full roster and authority matrix.
 
 ## Activation (raw data → scored snapshot → report)
 

@@ -62,6 +62,9 @@ interface Thresholds {
     cooldown_after_stop_mins: number;     // NO_TRADE window after a stop-out
     max_same_sector_same_dir_positions: number; // correlation cap
     bake_charges_into_targets: boolean;   // subtract round-trip charges from gross targets
+    // Day-context gates (see agents/regime.ts, agents/confluence.ts)
+    veto_on_choppy_day: boolean;          // default true — NO_TRADE on CHOPPY regime
+    min_confluence_score: number;         // default 0.5 — multi-TF agreement floor
   };
   sizing: {
     account_equity_inr: number;
@@ -265,6 +268,17 @@ function evaluateGates(
   ) {
     reasons.push(`margin util ${s.marginUtilisationPct.toFixed(1)}% > ${t.gates.max_margin_utilisation_pct}%`);
   }
+  // Day-context gates: CHOPPY day vetoes; gap-bias conflict flagged.
+  if (s.regime === "CHOPPY" && t.gates.veto_on_choppy_day) {
+    reasons.push(`CHOPPY regime (confidence ${(s.regimeConfidence ?? 0).toFixed(2)})`);
+  }
+  // Low multi-TF confluence → gate. 0.5 default threshold.
+  if (
+    s.confluenceScore !== null &&
+    s.confluenceScore < t.gates.min_confluence_score
+  ) {
+    reasons.push(`confluence ${s.confluenceScore.toFixed(2)} < ${t.gates.min_confluence_score}`);
+  }
   return reasons;
 }
 
@@ -300,24 +314,15 @@ function buildPlan(s: SymbolSnapshot, t: Thresholds): TradePlan | null {
   let roundTripChargesInr: number | null = null;
   let netT1R: number | null = null;
   let netT2R: number | null = null;
-  if (t.gates.bake_charges_into_targets && cappedQty > 0 && s.segment !== "equity") {
-    const chargesT1 = roundTripCharges(
-      s.segment === "futures" ? "futures" : "options",
-      cappedQty,
-      entry,
-      t1,
-    );
+  if (t.gates.bake_charges_into_targets && cappedQty > 0) {
+    // charges.ts Segment now covers equity | futures | options.
+    const chargesT1 = roundTripCharges(s.segment, cappedQty, entry, t1);
     roundTripChargesInr = Math.round(chargesT1.total_inr);
     const riskInr = cappedQty * stopDistance;
     const grossT1 = (t1 - entry) * (long ? cappedQty : -cappedQty);
     const grossT2 = (t2 - entry) * (long ? cappedQty : -cappedQty);
     netT1R = riskInr === 0 ? 0 : (grossT1 - chargesT1.total_inr) / riskInr;
-    const chargesT2 = roundTripCharges(
-      s.segment === "futures" ? "futures" : "options",
-      cappedQty,
-      entry,
-      t2,
-    );
+    const chargesT2 = roundTripCharges(s.segment, cappedQty, entry, t2);
     netT2R = riskInr === 0 ? 0 : (grossT2 - chargesT2.total_inr) / riskInr;
   }
 
@@ -341,6 +346,16 @@ function buildPlan(s: SymbolSnapshot, t: Thresholds): TradePlan | null {
 
 function round(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+function uniqueNonNull<T>(xs: Array<T | null>): T[] {
+  return Array.from(new Set(xs.filter((x): x is T => x !== null)));
+}
+
+function averageNonNull(xs: Array<number | null>): number | null {
+  const valid = xs.filter((x): x is number => x !== null);
+  if (valid.length === 0) return null;
+  return valid.reduce((a, b) => a + b, 0) / valid.length;
 }
 
 function checklistForSymbol(
@@ -404,6 +419,14 @@ function renderReport(
   parts.push("## Market context");
   parts.push(`- Adapter: \`${adapter}\``);
   parts.push(`- India VIX: ${vix ?? "UNKNOWN"}`);
+  parts.push("");
+  parts.push("## Day context");
+  const regimes = uniqueNonNull(results.map((r) => r.snapshot.regime));
+  const gaps = uniqueNonNull(results.map((r) => r.snapshot.gapClass));
+  parts.push(`- Regimes observed: ${regimes.length ? regimes.join(", ") : "UNKNOWN"}`);
+  parts.push(`- Gap classes:     ${gaps.length ? gaps.join(", ") : "UNKNOWN"}`);
+  const avgConfluence = averageNonNull(results.map((r) => r.snapshot.confluenceScore));
+  parts.push(`- Avg confluence:  ${avgConfluence === null ? "UNKNOWN" : avgConfluence.toFixed(2)}`);
   parts.push("");
   parts.push("## Tilt protection (today)");
   parts.push(`- Daily P&L so far: ₹${Math.round(cbState.dailyPnlInr)}`);

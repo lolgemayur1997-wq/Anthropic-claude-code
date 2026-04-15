@@ -94,10 +94,14 @@ export interface RawMarketData {
   segment: Segment;
   candles5m: RawCandle[];
   candles15m: RawCandle[];
+  candles1h: RawCandle[];            // for multi-TF confluence (optional; [] accepted)
+  prevDailyCloses: number[];         // for regime classifier (ATR on daily)
+  prevDayHigh: number | null;        // for gap classifier
+  prevDayLow: number | null;
   quote: RawQuote | null;
-  avgDailyVolume: number | null; // for RVOL approximation
-  optionChain: RawOptionChain | null; // required if segment === "options"
-  contractMeta: RawContractMeta | null; // required if segment !== "equity"
+  avgDailyVolume: number | null;
+  optionChain: RawOptionChain | null;
+  contractMeta: RawContractMeta | null;
   volMargin: RawVolMargin | null;
   news: RawNews | null;
   eventFlags: RawEventFlags;
@@ -150,6 +154,13 @@ export interface SymbolSnapshot {
   resultWithinDays: number | null;
   macroEventWithinMins: number | null;
 
+  // Day context (derived in buildSnapshot)
+  regime: "TREND" | "RANGE" | "REVERSAL" | "CHOPPY" | null;
+  regimeConfidence: number | null;
+  gapClass: "none" | "gap-up-continuation" | "gap-up-reverse" | "gap-down-continuation" | "gap-down-reverse" | "gap-fill" | "inside-day" | null;
+  gapPct: number | null;
+  confluenceScore: number | null;
+
   // NSE F&O pre-trade gates (rule §2–§7)
   inOfficialFnoUniverse: boolean | null;
   lotSize: number | null;
@@ -187,6 +198,10 @@ export function emptyRawMarketData(symbol: string, segment: Segment): RawMarketD
     segment,
     candles5m: [],
     candles15m: [],
+    candles1h: [],
+    prevDailyCloses: [],
+    prevDayHigh: null,
+    prevDayLow: null,
     quote: null,
     avgDailyVolume: null,
     optionChain: null,
@@ -241,6 +256,11 @@ export function blankSnapshot(symbol: string, segment: Segment): SymbolSnapshot 
     inFnoBan: false,
     resultWithinDays: null,
     macroEventWithinMins: null,
+    regime: null,
+    regimeConfidence: null,
+    gapClass: null,
+    gapPct: null,
+    confluenceScore: null,
     inOfficialFnoUniverse: null,
     lotSize: null,
     dteDays: null,

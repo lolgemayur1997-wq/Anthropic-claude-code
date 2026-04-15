@@ -11,6 +11,7 @@ import {
   rsi,
   supertrend,
   vwap,
+  type Candle,
 } from "./indicators.ts";
 import {
   countEventRisk,
@@ -30,6 +31,9 @@ import type {
 } from "./adapters/types.ts";
 import { blankSnapshot } from "./adapters/types.ts";
 import { validateRawMarketData } from "./validate.ts";
+import { classifyRegime } from "./regime.ts";
+import { classifyGap } from "./gap.ts";
+import { scoreConfluence } from "./confluence.ts";
 
 const DEFAULT_MIN_RVOL = 1.5;
 
@@ -139,6 +143,33 @@ export function buildSnapshot(raw: RawMarketData): SymbolSnapshot {
       raw.eventFlags.macroEventWithinMins <= 60,
   });
 
+  // Day context: regime, gap, multi-TF confluence. Each returns null if
+  // insufficient input; the runner / senior-trader handle null gracefully.
+  const regimeResult = classifyRegime({
+    candles15m: raw.candles15m as unknown as Candle[],
+    prevCloses: raw.prevDailyCloses,
+    vix: null, // VIX is global, wired in by the runner via cross-reference
+  });
+  const gapResult =
+    raw.prevDayHigh !== null && raw.prevDayLow !== null
+      ? classifyGap({
+          prevClose: raw.quote.prevClose,
+          prevHigh: raw.prevDayHigh,
+          prevLow: raw.prevDayLow,
+          todayOpen: raw.candles5m[0]?.open ?? raw.quote.prevClose,
+          candles5m: raw.candles5m as unknown as Candle[],
+        })
+      : null;
+  const confluenceResult =
+    raw.candles1h.length > 0
+      ? scoreConfluence({
+          candles5m: raw.candles5m as unknown as Candle[],
+          candles15m: raw.candles15m as unknown as Candle[],
+          candles1h: raw.candles1h as unknown as Candle[],
+          ltp: raw.quote.ltp,
+        })
+      : null;
+
   const setupLabel = deriveSetupLabel(
     raw.quote.ltp,
     orbHigh,
@@ -179,6 +210,11 @@ export function buildSnapshot(raw: RawMarketData): SymbolSnapshot {
     inFnoBan: raw.eventFlags.inFnoBan,
     resultWithinDays: raw.eventFlags.resultWithinDays,
     macroEventWithinMins: raw.eventFlags.macroEventWithinMins,
+    regime: regimeResult?.regime ?? null,
+    regimeConfidence: regimeResult?.confidence ?? null,
+    gapClass: gapResult?.gapClass ?? null,
+    gapPct: gapResult?.gapPct ?? null,
+    confluenceScore: confluenceResult?.score ?? null,
     inOfficialFnoUniverse: raw.contractMeta?.inOfficialFnoUniverse ?? null,
     lotSize: raw.contractMeta?.lotSize ?? null,
     dteDays: raw.contractMeta?.dteDays ?? null,

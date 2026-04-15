@@ -41,14 +41,18 @@ export const DEFAULT_SECTOR_MAP: Record<string, string> = {
   IOC: "ENERGY",
   GAIL: "ENERGY",
 
-  // Auto
+  // Auto — NSE tickers use & and -, NOT underscore
   TATAMOTORS: "AUTO",
   MARUTI: "AUTO",
-  M_M: "AUTO",
+  "M&M": "AUTO",
+  "M&MFIN": "NBFC",
   HEROMOTOCO: "AUTO",
-  BAJAJ_AUTO: "AUTO",
+  "BAJAJ-AUTO": "AUTO",
   EICHERMOT: "AUTO",
   TVSMOTOR: "AUTO",
+  ASHOKLEY: "AUTO",
+  BOSCHLTD: "AUTO",
+  MOTHERSON: "AUTO",
 
   // FMCG
   HINDUNILVR: "FMCG",

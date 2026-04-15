@@ -25,6 +25,39 @@ describe("chargesForLeg — STT", () => {
     // turnover = 6000; STT = 0.001 * 6000 = 6
     expect(r.stt).toBeCloseTo(6, 5);
   });
+  test("equity intraday buy has no STT", () => {
+    const r = chargesForLeg({ segment: "equity", side: "buy", qty: 10, price: 2500 });
+    expect(r.stt).toBe(0);
+  });
+  test("equity intraday sell STT = 0.025% of turnover", () => {
+    const r = chargesForLeg({ segment: "equity", side: "sell", qty: 10, price: 2500 });
+    // turnover = 25000; STT = 0.00025 * 25000 = 6.25
+    expect(r.stt).toBeCloseTo(6.25, 5);
+  });
+});
+
+describe("Audit regression — equity segment no longer silently skipped", () => {
+  test("equity round-trip produces non-null charges", () => {
+    const rt = roundTripCharges("equity", 10, 2500, 2520);
+    expect(rt.total_inr).toBeGreaterThan(0);
+    // Sanity: on ~25k notional, total charges are order of ₹20-50 range
+    // (brokerage + STT + txn + SEBI + stamp + GST).
+    expect(rt.total_inr).toBeGreaterThan(15);
+    expect(rt.total_inr).toBeLessThan(100);
+  });
+  test("netRMultiple for equity becomes less than gross", () => {
+    // Larger qty so brokerage (flat ~₹20/leg) doesn't dominate.
+    // entry 500, stop 495, exit 505 → gross R = 1.0 with 1000 qty
+    const n = netRMultiple("equity", 1000, 500, 495, 505);
+    expect(n).toBeLessThan(1);   // charges erode gross
+    expect(n).toBeGreaterThan(0); // but trade is still net-positive
+  });
+  test("netRMultiple can go negative on tiny equity trades (brokerage eats gains)", () => {
+    // This is a FEATURE not a bug — surfaces the reality that a 1R gross
+    // move on a tiny-qty trade is net-negative after brokerage.
+    const n = netRMultiple("equity", 10, 2500, 2495, 2505);
+    expect(n).toBeLessThan(0);
+  });
 });
 
 describe("chargesForLeg — stamp duty (buy side only)", () => {

@@ -11,6 +11,13 @@ describe("sectorOf", () => {
     expect(sectorOf("TCS")).toBe("IT");
     expect(sectorOf("RELIANCE")).toBe("ENERGY");
   });
+  test("handles NSE tickers with & and - punctuation (audit regression)", () => {
+    // Real NSE symbols: Mahindra & Mahindra = "M&M", Bajaj Auto = "BAJAJ-AUTO".
+    // Previously stored as M_M / BAJAJ_AUTO which would miss the real ticker.
+    expect(sectorOf("M&M")).toBe("AUTO");
+    expect(sectorOf("BAJAJ-AUTO")).toBe("AUTO");
+    expect(sectorOf("m&m")).toBe("AUTO"); // case-insensitive
+  });
   test("is case-insensitive", () => {
     expect(sectorOf("hdfcbank")).toBe("BANKS");
   });
