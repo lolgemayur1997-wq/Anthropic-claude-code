@@ -66,6 +66,25 @@ Discipline (tilt protection + learning loop):
 - On explicit `/intraday-research` invocation.
 - Triggered by the 09:45 cron hook (see `scripts/run-intraday-research.sh`).
 - Before any stock-options trade: run `/pre-trade <symbol> <bias>` first.
+- After the morning scan: run `/review-trade` to get the senior-trader's
+  discretionary review of each `PASS` plan.
+
+## Two-stage review (team)
+
+```
+Stage 1 — intraday-researcher    (rule-based)
+  live data → indicators → scoring → NSE F&O gates → circuit breakers → plan
+
+Stage 2 — senior-trader          (discretionary, /review-trade)
+  context · pattern quality · trap risk · flow-vs-price · premium sanity ·
+  structure · size · invalidation clarity · regret test
+  ⇒ APPROVE / REVISE / REJECT per plan
+```
+
+The senior-trader can DOWNGRADE a PASS to NO_TRADE with reason; it cannot
+UPGRADE a gated or UNKNOWN plan — rule gates encode exchange reality and
+stay the floor. See `.claude/agents/README.md` for the full roster and
+authority matrix.
 
 ## Activation (raw data → scored snapshot → report)
 

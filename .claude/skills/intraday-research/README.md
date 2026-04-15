@@ -5,12 +5,17 @@ Indian market. Ships with:
 
 - `SKILL.md` — the full checklist (chart patterns, indicators, volume, OI,
   order blocks, news, event risk) and the trade-plan YAML template.
-- `../../agents/intraday-researcher.md` — the subagent that runs the skill.
-- `../../../agents/intraday-research.ts` — the runner binary.
+- `../../agents/intraday-researcher.md` — the rule-based scanner subagent.
+- `../../agents/senior-trader.md` — the discretionary reviewer subagent
+  (second stage of the team).
+- `../../agents/README.md` — team roster, pipeline flow, authority matrix.
+- `../../../agents/intraday-research.ts` — the morning scan runner.
+- `../../../agents/post-mortem.ts` — the EOD review runner.
 - `../../../agents/adapters/` — broker adapter interface + stubs for Kite
   Connect, Upstox, and Dhan (fill in your own credentials).
-- `../../../scripts/run-intraday-research.sh` — cron wrapper.
-- `../../../scripts/install-cron.sh` — installs the 09:45 IST cron entry.
+- `../../../scripts/run-intraday-research.sh` — 09:45 IST cron wrapper.
+- `../../../scripts/run-post-mortem.sh` — 15:45 IST cron wrapper.
+- `../../../scripts/install-cron.sh` — installs both cron entries.
 
 ## This is NOT a trade signal generator
 
