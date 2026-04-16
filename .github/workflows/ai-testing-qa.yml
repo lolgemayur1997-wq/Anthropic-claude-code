@@ -51,23 +51,38 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          PAYLOAD=$(jq -n \
-            --arg files "${{ steps.changed.outputs.files }}" \
-            --arg contents "${{ steps.changed.outputs.contents }}" \
-            '{
-              "contents": [{
-                "parts": [{
-                  "text": ("You are an expert QA engineer. Analyze these source files and generate comprehensive test code.\n\nChanged files:\n" + $files + "\n\nSource code:\n" + $contents + "\n\nGenerate complete, runnable test files covering:\n- Happy path scenarios\n- Edge cases and boundary conditions\n- Error handling paths\n\nUse describe/it/expect syntax. Provide complete test file contents.")
-                }]
-              }],
-              "generationConfig": {"maxOutputTokens": 4000}
-            }')
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "::error::GEMINI_API_KEY secret is not set. Add it at Settings → Secrets → Actions."
+            TESTS="**Error:** \`GEMINI_API_KEY\` secret is not configured. Add it at repo Settings → Secrets and variables → Actions → New repository secret."
+          else
+            PAYLOAD=$(jq -n \
+              --arg files "${{ steps.changed.outputs.files }}" \
+              --arg contents "${{ steps.changed.outputs.contents }}" \
+              '{
+                "contents": [{
+                  "parts": [{
+                    "text": ("You are an expert QA engineer. Analyze these source files and generate comprehensive test code.\n\nChanged files:\n" + $files + "\n\nSource code:\n" + $contents + "\n\nGenerate complete, runnable test files covering:\n- Happy path scenarios\n- Edge cases and boundary conditions\n- Error handling paths\n\nUse describe/it/expect syntax. Provide complete test file contents.")
+                  }]
+                }],
+                "generationConfig": {"maxOutputTokens": 4000}
+              }')
 
-          RESPONSE=$(curl -s "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$GEMINI_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d "$PAYLOAD")
+            RESPONSE=$(curl -s -w "\n%{http_code}" "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$GEMINI_API_KEY" \
+              -H "Content-Type: application/json" \
+              -d "$PAYLOAD")
 
-          TESTS=$(echo "$RESPONSE" | jq -r '.candidates[0].content.parts[0].text // "Test generation failed. Check API key."')
+            HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+            BODY=$(echo "$RESPONSE" | sed '$d')
+
+            if [ "$HTTP_CODE" != "200" ]; then
+              ERROR_MSG=$(echo "$BODY" | jq -r '.error.message // "Unknown error"')
+              echo "::error::Gemini API returned HTTP $HTTP_CODE: $ERROR_MSG"
+              TESTS="**Error:** Gemini API returned HTTP $HTTP_CODE — $ERROR_MSG"
+            else
+              TESTS=$(echo "$BODY" | jq -r '.candidates[0].content.parts[0].text // "No tests generated (empty response from API)."')
+            fi
+          fi
+
           EOF_MARKER=$(dd if=/dev/urandom bs=15 count=1 2>/dev/null | base64)
           echo "tests<<$EOF_MARKER" >> $GITHUB_OUTPUT
           echo "$TESTS" >> $GITHUB_OUTPUT

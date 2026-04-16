@@ -32,27 +32,42 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          DIFF_CONTENT=$(cat <<'ENDDIFF'
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "::error::GEMINI_API_KEY secret is not set. Add it at Settings → Secrets → Actions."
+            REVIEW="**Error:** \`GEMINI_API_KEY\` secret is not configured. Add it at repo Settings → Secrets and variables → Actions → New repository secret."
+          else
+            DIFF_CONTENT=$(cat <<'ENDDIFF'
           ${{ steps.diff.outputs.diff }}
           ENDDIFF
-          )
+            )
 
-          PAYLOAD=$(jq -n \
-            --arg diff "$DIFF_CONTENT" \
-            '{
-              "contents": [{
-                "parts": [{
-                  "text": ("You are an expert code reviewer. Review this PR diff thoroughly.\n\nChecklist:\n1. Code Quality: clean code, naming, SOLID\n2. Security: injection, XSS, secrets exposure\n3. Performance: memory leaks, blocking ops\n4. Type Safety: proper types, no any\n5. Testing: adequate coverage\n\nFor each finding provide:\n- Severity: critical / warning / suggestion / praise\n- File & Line\n- Issue description\n- Concrete fix\n\nEnd with verdict: APPROVE, REQUEST_CHANGES, or COMMENT.\n\nDiff:\n```\n" + $diff + "\n```")
-                }]
-              }],
-              "generationConfig": {"maxOutputTokens": 4000}
-            }')
+            PAYLOAD=$(jq -n \
+              --arg diff "$DIFF_CONTENT" \
+              '{
+                "contents": [{
+                  "parts": [{
+                    "text": ("You are an expert code reviewer. Review this PR diff thoroughly.\n\nChecklist:\n1. Code Quality: clean code, naming, SOLID\n2. Security: injection, XSS, secrets exposure\n3. Performance: memory leaks, blocking ops\n4. Type Safety: proper types, no any\n5. Testing: adequate coverage\n\nFor each finding provide:\n- Severity: critical / warning / suggestion / praise\n- File & Line\n- Issue description\n- Concrete fix\n\nEnd with verdict: APPROVE, REQUEST_CHANGES, or COMMENT.\n\nDiff:\n```\n" + $diff + "\n```")
+                  }]
+                }],
+                "generationConfig": {"maxOutputTokens": 4000}
+              }')
 
-          RESPONSE=$(curl -s "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$GEMINI_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d "$PAYLOAD")
+            RESPONSE=$(curl -s -w "\n%{http_code}" "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$GEMINI_API_KEY" \
+              -H "Content-Type: application/json" \
+              -d "$PAYLOAD")
 
-          REVIEW=$(echo "$RESPONSE" | jq -r '.candidates[0].content.parts[0].text // "Review could not be generated. Check API key."')
+            HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+            BODY=$(echo "$RESPONSE" | sed '$d')
+
+            if [ "$HTTP_CODE" != "200" ]; then
+              ERROR_MSG=$(echo "$BODY" | jq -r '.error.message // "Unknown error"')
+              echo "::error::Gemini API returned HTTP $HTTP_CODE: $ERROR_MSG"
+              REVIEW="**Error:** Gemini API returned HTTP $HTTP_CODE — $ERROR_MSG"
+            else
+              REVIEW=$(echo "$BODY" | jq -r '.candidates[0].content.parts[0].text // "No review generated (empty response from API)."')
+            fi
+          fi
+
           EOF_MARKER=$(dd if=/dev/urandom bs=15 count=1 2>/dev/null | base64)
           echo "review<<$EOF_MARKER" >> $GITHUB_OUTPUT
           echo "$REVIEW" >> $GITHUB_OUTPUT
