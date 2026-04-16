@@ -24,6 +24,8 @@ import { join } from "node:path";
 import type { Adapter, AdapterName, SymbolSnapshot } from "./adapters/types.ts";
 import { loadAdapter } from "./adapters/index.ts";
 import { roundTripCharges } from "./charges.ts";
+import { regimeStructureConflict } from "./regime.ts";
+import { gapBiasConflict } from "./gap.ts";
 import {
   appendEvent,
   circuitBreakerGateReasons,
@@ -487,8 +489,23 @@ function renderPlan(r: ChecklistResult): string {
     `  notional_inr: ${p.notionalInr}`,
     `  round_trip_charges_inr: ${p.roundTripChargesInr ?? "n/a"}`,
     "```",
+    ...renderConflictWarnings(r),
     "",
   ].join("\n");
+}
+
+function renderConflictWarnings(r: ChecklistResult): string[] {
+  if (!r.plan) return [];
+  const warnings: string[] = [];
+  if (r.snapshot.regime) {
+    const rc = regimeStructureConflict(r.snapshot.regime, r.setup ?? "");
+    if (rc) warnings.push(`> **Regime conflict:** ${rc}`);
+  }
+  if (r.snapshot.gapClass && r.plan.bias) {
+    const gc = gapBiasConflict(r.snapshot.gapClass, r.plan.bias);
+    if (gc) warnings.push(`> **Gap conflict:** ${gc}`);
+  }
+  return warnings;
 }
 
 // --- Main ---

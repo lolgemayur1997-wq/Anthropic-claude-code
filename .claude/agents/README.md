@@ -74,7 +74,8 @@ These are the invariants. Neither agent can relax them.
 | Emit a PASS plan                            | ✓                   | —             | —            | —        |
 | Downgrade PASS → NO_TRADE (with reason)     | —                   | ✓             | ✓ (via veto) | ✓        |
 | Upgrade GATED / UNKNOWN → PASS              | —                   | —             | —            | —        |
-| Reduce qty below mechanical                 | —                   | —             | ✓            | ✓        |
+| Suggest revised qty (non-binding input to RM)| —                   | ✓             | —            | —        |
+| Reduce qty below mechanical (binding)        | —                   | —             | ✓            | ✓        |
 | Increase qty above mechanical               | —                   | —             | —            | —        |
 | Place an order                              | —                   | —             | —            | ✓        |
 | Log to journal                              | ✓ (PLAN_EMITTED / GATE_BLOCKED) | — | —      | ✓ (TRADE_TAKEN / TRADE_CLOSED / STOP_HIT) |

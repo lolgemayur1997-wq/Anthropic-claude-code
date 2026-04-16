@@ -127,7 +127,7 @@ review:
     if_no_suggest: <alternative structure + one-line rationale>
   size_critique:
     agreed: <yes | no>
-    if_no_suggest: <revised qty + rationale>
+    if_no_suggest: <suggested qty + rationale (non-binding; risk-manager decides final qty)>
   revised_plan_if_any:
     entry_trigger: <exact condition>
     stop_level: <price>

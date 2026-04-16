@@ -46,6 +46,12 @@ Structure + strike (analytics):
 - `/pick-strike` — delta-targeted strike picker (Black-Scholes); supports
   vertical-spread two-leg selection
 
+Team review + sizing:
+- `/review-trade` — senior-trader discretionary review of PASS plans
+  (APPROVE / REVISE / REJECT with concrete observations)
+- `/size-check` — risk-manager final sizing (multiplicative haircuts →
+  `final_qty`, often < mechanical qty)
+
 Discipline (tilt protection + learning loop):
 - `/journal` — append-only event log; powers circuit breakers
 - `/post-mortem` — EOD review: forecast vs. outcome, gate calibration, tuning
