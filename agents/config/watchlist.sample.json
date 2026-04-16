@@ -1,0 +1,12 @@
+{
+  "_comment": "Copy to watchlist.json and edit. Liquid F&O underlyings only for options trades. Index symbols: NIFTY, BANKNIFTY, FINNIFTY.",
+  "symbols": [
+    { "symbol": "NIFTY", "segment": "options" },
+    { "symbol": "BANKNIFTY", "segment": "options" },
+    { "symbol": "RELIANCE", "segment": "equity" },
+    { "symbol": "HDFCBANK", "segment": "equity" },
+    { "symbol": "TCS", "segment": "equity" },
+    { "symbol": "INFY", "segment": "equity" },
+    { "symbol": "ICICIBANK", "segment": "equity" }
+  ]
+}

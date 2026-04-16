@@ -1,0 +1,41 @@
+{
+  "_comment": "Copy to thresholds.json and edit. Weights sum does not need to be 1; score is normalized to 100. Gates are hard NO-TRADE overrides. Defaults reflect .claude/rules/nse-fno-pre-trade.md §1-§7 (never looser than exchange thresholds).",
+  "weights": {
+    "structure": 0.20,
+    "pattern": 0.15,
+    "indicators": 0.15,
+    "volume": 0.15,
+    "orderBlocks": 0.10,
+    "options": 0.15,
+    "news": 0.05,
+    "eventPenalty": 0.10
+  },
+  "gates": {
+    "vix_ceiling": 22.0,
+    "spread_ceiling_pct": 0.15,
+    "min_rvol_for_breakout": 1.5,
+    "score_threshold": 65,
+    "skip_on_result_within_days": 1,
+    "max_mwpl_pct": 95,
+    "skip_corp_action_within_days": 2,
+    "max_atm_spread_pct": 0.5,
+    "min_oi_lot_multiple": 5,
+    "min_dte_for_short_premium": 2,
+    "gate_extra_elm_for_short": true,
+    "gate_asm": true,
+    "require_in_fno_universe_for_options": true,
+    "max_margin_utilisation_pct": 25,
+    "daily_loss_cap_pct": 2.0,
+    "max_trades_per_day": 3,
+    "cooldown_after_stop_mins": 30,
+    "max_same_sector_same_dir_positions": 2,
+    "bake_charges_into_targets": true,
+    "veto_on_choppy_day": true,
+    "min_confluence_score": 0.5
+  },
+  "sizing": {
+    "account_equity_inr": 500000,
+    "account_risk_pct": 0.5,
+    "notional_cap_pct": 10
+  }
+}
