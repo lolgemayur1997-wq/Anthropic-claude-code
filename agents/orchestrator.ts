@@ -163,6 +163,17 @@ function formatResults(results: StageResult[]): string {
 
 // --- Stage Runner ---
 
+/**
+ * Executes a single pipeline stage by sending the relevant code context
+ * to Gemini for analysis. Each stage type gathers different inputs:
+ * - review: git diff for the given scope
+ * - verify: local typecheck/format/test outputs
+ * - test/docs: changed file contents
+ *
+ * @param stage - Pipeline stage name (must match a key in STAGE_PROMPTS)
+ * @param scope - Git scope for gathering context ("staged" | "branch" | "all")
+ * @returns Stage result with status, summary, and timing information
+ */
 async function runStage(stage: string, scope: string): Promise<StageResult> {
   const start = Date.now();
 
