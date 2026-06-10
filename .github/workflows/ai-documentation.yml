@@ -67,23 +67,38 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          PAYLOAD=$(jq -n \
-            --arg files "${{ steps.changes.outputs.files }}" \
-            --arg contents "${{ steps.changes.outputs.contents }}" \
-            '{
-              "contents": [{
-                "parts": [{
-                  "text": ("You are a technical documentation expert. Generate documentation for these source files.\n\nFiles:\n" + $files + "\n\nSource:\n" + $contents + "\n\nProvide:\n1. JSDoc/TSDoc comments for exported functions, interfaces, types\n2. A summary of what each module does\n3. Any suggested README updates\n\nDocument the why, not the what. Keep it concise.")
-                }]
-              }],
-              "generationConfig": {"maxOutputTokens": 4000}
-            }')
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "::error::GEMINI_API_KEY secret is not set. Add it at Settings → Secrets → Actions."
+            DOCS="**Error:** \`GEMINI_API_KEY\` secret is not configured. Add it at repo Settings → Secrets and variables → Actions → New repository secret."
+          else
+            PAYLOAD=$(jq -n \
+              --arg files "${{ steps.changes.outputs.files }}" \
+              --arg contents "${{ steps.changes.outputs.contents }}" \
+              '{
+                "contents": [{
+                  "parts": [{
+                    "text": ("You are a technical documentation expert. Generate documentation for these source files.\n\nFiles:\n" + $files + "\n\nSource:\n" + $contents + "\n\nProvide:\n1. JSDoc/TSDoc comments for exported functions, interfaces, types\n2. A summary of what each module does\n3. Any suggested README updates\n\nDocument the why, not the what. Keep it concise.")
+                  }]
+                }],
+                "generationConfig": {"maxOutputTokens": 4000}
+              }')
 
-          RESPONSE=$(curl -s "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$GEMINI_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d "$PAYLOAD")
+            RESPONSE=$(curl -s -w "\n%{http_code}" "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$GEMINI_API_KEY" \
+              -H "Content-Type: application/json" \
+              -d "$PAYLOAD")
 
-          DOCS=$(echo "$RESPONSE" | jq -r '.candidates[0].content.parts[0].text // "Documentation generation failed. Check API key."')
+            HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+            BODY=$(echo "$RESPONSE" | sed '$d')
+
+            if [ "$HTTP_CODE" != "200" ]; then
+              ERROR_MSG=$(echo "$BODY" | jq -r '.error.message // "Unknown error"')
+              echo "::error::Gemini API returned HTTP $HTTP_CODE: $ERROR_MSG"
+              DOCS="**Error:** Gemini API returned HTTP $HTTP_CODE — $ERROR_MSG"
+            else
+              DOCS=$(echo "$BODY" | jq -r '.candidates[0].content.parts[0].text // "No documentation generated (empty response from API)."')
+            fi
+          fi
+
           EOF_MARKER=$(dd if=/dev/urandom bs=15 count=1 2>/dev/null | base64)
           echo "docs<<$EOF_MARKER" >> $GITHUB_OUTPUT
           echo "$DOCS" >> $GITHUB_OUTPUT

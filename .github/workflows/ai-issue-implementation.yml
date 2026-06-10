@@ -50,24 +50,39 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          PAYLOAD=$(jq -n \
-            --arg title "${{ steps.issue.outputs.title }}" \
-            --arg body "${{ steps.issue.outputs.body }}" \
-            --arg tree "${{ steps.context.outputs.tree }}" \
-            '{
-              "contents": [{
-                "parts": [{
-                  "text": ("You are an expert software engineer. Given this issue and project file tree, provide a detailed implementation plan with exact file paths and complete code changes.\n\nIssue: " + $title + "\n\nDescription:\n" + $body + "\n\nProject files:\n" + $tree + "\n\nProvide step-by-step implementation with full code blocks.")
-                }]
-              }],
-              "generationConfig": {"maxOutputTokens": 4000}
-            }')
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "::error::GEMINI_API_KEY secret is not set. Add it at Settings → Secrets → Actions."
+            PLAN="**Error:** \`GEMINI_API_KEY\` secret is not configured. Add it at repo Settings → Secrets and variables → Actions → New repository secret."
+          else
+            PAYLOAD=$(jq -n \
+              --arg title "${{ steps.issue.outputs.title }}" \
+              --arg body "${{ steps.issue.outputs.body }}" \
+              --arg tree "${{ steps.context.outputs.tree }}" \
+              '{
+                "contents": [{
+                  "parts": [{
+                    "text": ("You are an expert software engineer. Given this issue and project file tree, provide a detailed implementation plan with exact file paths and complete code changes.\n\nIssue: " + $title + "\n\nDescription:\n" + $body + "\n\nProject files:\n" + $tree + "\n\nProvide step-by-step implementation with full code blocks.")
+                  }]
+                }],
+                "generationConfig": {"maxOutputTokens": 4000}
+              }')
 
-          RESPONSE=$(curl -s "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$GEMINI_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d "$PAYLOAD")
+            RESPONSE=$(curl -s -w "\n%{http_code}" "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$GEMINI_API_KEY" \
+              -H "Content-Type: application/json" \
+              -d "$PAYLOAD")
 
-          PLAN=$(echo "$RESPONSE" | jq -r '.candidates[0].content.parts[0].text // "Plan generation failed. Check API key."')
+            HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+            BODY=$(echo "$RESPONSE" | sed '$d')
+
+            if [ "$HTTP_CODE" != "200" ]; then
+              ERROR_MSG=$(echo "$BODY" | jq -r '.error.message // "Unknown error"')
+              echo "::error::Gemini API returned HTTP $HTTP_CODE: $ERROR_MSG"
+              PLAN="**Error:** Gemini API returned HTTP $HTTP_CODE — $ERROR_MSG"
+            else
+              PLAN=$(echo "$BODY" | jq -r '.candidates[0].content.parts[0].text // "No plan generated (empty response from API)."')
+            fi
+          fi
+
           EOF_MARKER=$(dd if=/dev/urandom bs=15 count=1 2>/dev/null | base64)
           echo "plan<<$EOF_MARKER" >> $GITHUB_OUTPUT
           echo "$PLAN" >> $GITHUB_OUTPUT
